@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-ticker,
+  .animate-marquee,
+  .animate-drip,
+  .animate-breathe,
+  .animate-pulseSoft,
+  .animate-cdPop {
+    animation: none !important;
+  }
+}
