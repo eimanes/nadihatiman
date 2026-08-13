@@ -90,7 +90,12 @@ export default function CanvaEmbed({
         </div>
       </header>
 
-      <div className="relative h-[70vh] min-h-[480px] bg-cream">
+      {/* Taller on mobile so the full design is viewable; the wrapper is
+          scrollable via touch in case the embed overflows. */}
+      <div
+        className="relative h-[85vh] min-h-[560px] overflow-auto bg-cream sm:h-[70vh] sm:min-h-[480px]"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
         {/* key={nonce} forces a full iframe reload on every refresh */}
         <iframe
           key={nonce}

@@ -561,12 +561,14 @@ export default function GuestlistPage() {
 				)}
 			</section>
 
-			{/* Canva reference (read-only, auto-refresh — never edits the design) */}
-			<details className="mt-6 rounded-2xl border border-line bg-white p-5">
+			{/* Canva reference (read-only, auto-refresh — never edits the design).
+			    Expanded by default; the user can collapse it. Stacked one per row
+			    (Sanding first, then Tandang). */}
+			<details open className="mt-6 rounded-2xl border border-line bg-white p-5">
 				<summary className="cursor-pointer font-serif text-lg text-ink">
 					📎 Original Canva reference (read-only, auto-refresh)
 				</summary>
-				<div className="mt-5 grid gap-6 lg:grid-cols-2">
+				<div className="mt-5 grid grid-cols-1 gap-6">
 					{canva.map((g) => (
 						<CanvaEmbed
 							key={g.id}

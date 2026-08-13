@@ -24,8 +24,8 @@ export default function Story() {
 		<section id="story">
 			<div ref={outerRef} className="relative" style={{ height: `${n * 100 + 160}vh` }}>
 				<div className="sticky top-0 grid h-screen grid-rows-[auto_1fr_auto] overflow-hidden px-4">
-					{/* Row 1: heading */}
-					<div className="pointer-events-none z-30 pt-[5vh] text-center md:pt-[7vh]">
+					{/* Row 1: heading (extra top padding so the fixed nav never overlaps it) */}
+					<div className="pointer-events-none z-30 pt-24 text-center md:pt-28">
 						<p className="mb-2 text-xs uppercase tracking-[0.3em] text-gold md:mb-3">
 							{site.landing.story.label}
 						</p>
