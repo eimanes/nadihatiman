@@ -1,7 +1,9 @@
 "use client"
 
+import { useUser } from "@clerk/nextjs"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Reveal from "@/components/Reveal"
+import { isEditorEmail } from "@/lib/admin-emails"
 
 type PrepSection = {
   _id: string
@@ -51,12 +53,14 @@ const EVENT_BADGE = (id: string) =>
   EVENT_OPTIONS.find((o) => o.id === id)?.label ?? id
 
 export default function PreparationPage() {
+  const { user } = useUser()
   const [sections, setSections] = useState<PrepSection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [filter, setFilter] = useState("semua")
   const [editMode, setEditMode] = useState(false)
+  const canEdit = isEditorEmail(user?.primaryEmailAddress?.emailAddress)
 
   // New section form
   const [title, setTitle] = useState("")
@@ -206,17 +210,19 @@ export default function PreparationPage() {
             or remove — changes are saved automatically.
           </p>
         </Reveal>
-        <Reveal delay={0.24}>
-          <button
-            type="button"
-            onClick={() => setEditMode((v) => !v)}
-            className={`mt-5 inline-block rounded-full px-6 py-2.5 text-[11px] uppercase tracking-[0.16em] text-white transition-transform hover:-translate-y-px ${
-              editMode ? "bg-ink" : "bg-sage"
-            }`}
-          >
-            {editMode ? "✓ Done editing" : "✏️ Edit"}
-          </button>
-        </Reveal>
+        {canEdit && (
+          <Reveal delay={0.24}>
+            <button
+              type="button"
+              onClick={() => setEditMode((v) => !v)}
+              className={`mt-5 inline-block rounded-full px-6 py-2.5 text-[11px] uppercase tracking-[0.16em] text-white transition-transform hover:-translate-y-px ${
+                editMode ? "bg-ink" : "bg-sage"
+              }`}
+            >
+              {editMode ? "✓ Done editing" : "✏️ Edit"}
+            </button>
+          </Reveal>
+        )}
       </header>
 
       {error && (

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireEditor } from "@/lib/admin"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 
 export const dynamic = "force-dynamic"
@@ -31,6 +32,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const editor = await requireEditor()
+  if (!editor.ok) {
+    return NextResponse.json({ error: editor.error }, { status: editor.status })
+  }
   if (!isMongoConfigured()) {
     return NextResponse.json(NOT_CONFIGURED, { status: 503 })
   }

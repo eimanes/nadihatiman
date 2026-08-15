@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { UserButton, useUser } from "@clerk/nextjs"
 import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { site } from "@/content/site"
@@ -16,6 +17,7 @@ const PRIMARY_HREFS = ["/", "/tentative", "/invitations", "/guestlist"]
  * hamburger button opens a menu with the full navigation.
  */
 export default function PlannerNav() {
+  const { isSignedIn } = useUser()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const pathname = usePathname()
@@ -156,6 +158,20 @@ export default function PlannerNav() {
               </div>
             )}
           </div>
+          {isSignedIn ? (
+            <UserButton
+              appearance={{
+                elements: { avatarBox: "h-8 w-8" },
+              }}
+            />
+          ) : (
+            <Link
+              href="/sign-in"
+              className="rounded-full border border-line bg-white px-3 py-1.5 text-[11px] text-ink transition-colors hover:bg-sage-soft"
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </nav>
     </div>

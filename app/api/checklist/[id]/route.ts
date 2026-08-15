@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
+import { requireEditor } from "@/lib/admin"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 
 export const dynamic = "force-dynamic"
@@ -12,6 +13,10 @@ const NOT_CONFIGURED = {
 type Params = { params: Promise<{ id: string }> }
 
 export async function PATCH(req: Request, { params }: Params) {
+  const editor = await requireEditor()
+  if (!editor.ok) {
+    return NextResponse.json({ error: editor.error }, { status: editor.status })
+  }
   if (!isMongoConfigured()) {
     return NextResponse.json(NOT_CONFIGURED, { status: 503 })
   }
@@ -40,6 +45,10 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
+  const editor = await requireEditor()
+  if (!editor.ok) {
+    return NextResponse.json({ error: editor.error }, { status: editor.status })
+  }
   if (!isMongoConfigured()) {
     return NextResponse.json(NOT_CONFIGURED, { status: 503 })
   }
