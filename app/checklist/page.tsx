@@ -84,7 +84,7 @@ export default function ChecklistPage() {
 
   const addItem = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!task.trim() || busy) return
+    if (!canEdit || !task.trim() || busy) return
     setBusy(true)
     try {
       const res = await fetch("/api/checklist", {
@@ -105,7 +105,7 @@ export default function ChecklistPage() {
   }
 
   const seedDefaults = async () => {
-    if (busy) return
+    if (!canEdit || busy) return
     setBusy(true)
     try {
       const res = await fetch("/api/checklist", {
@@ -120,6 +120,7 @@ export default function ChecklistPage() {
   }
 
   const toggle = async (item: ChecklistItem) => {
+    if (!canEdit) return
     setItems((prev) =>
       prev.map((i) => (i._id === item._id ? { ...i, done: !i.done } : i)),
     )
@@ -131,6 +132,7 @@ export default function ChecklistPage() {
   }
 
   const remove = async (item: ChecklistItem) => {
+    if (!canEdit) return
     setItems((prev) => prev.filter((i) => i._id !== item._id))
     await fetch(`/api/checklist/${item._id}`, { method: "DELETE" })
   }
@@ -288,19 +290,23 @@ export default function ChecklistPage() {
                   type="checkbox"
                   checked={item.done}
                   onChange={() => toggle(item)}
-                  className="h-4 w-4 accent-sage"
+                  disabled={!canEdit}
+                  className="h-4 w-4 accent-sage disabled:cursor-not-allowed disabled:opacity-40"
                 />
               ) : (
-                <span
-                  aria-hidden="true"
-                  className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
+                <button
+                  type="button"
+                  onClick={() => toggle(item)}
+                  disabled={!canEdit}
+                  aria-label={item.done ? "Mark task as not done" : "Mark task as done"}
+                  className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] transition-opacity ${
                     item.done
                       ? "bg-sage text-white"
                       : "border border-line text-transparent"
-                  }`}
+                  } ${!canEdit ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
                 >
                   ✓
-                </span>
+                </button>
               )}
               <span
                 className={`flex-1 text-[14px] ${

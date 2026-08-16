@@ -4,11 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Reveal from "@/components/Reveal"
 import { usePermissions } from "@/hooks/usePermissions"
 
+type Organizer = {
+  role: string
+  name: string
+}
+
 type PrepSection = {
   _id: string
   title: string
   event: string
   items: string[]
+  organization: Organizer[]
   order: number
   createdAt: string
 }
@@ -20,31 +26,44 @@ const EVENT_OPTIONS = [
   { id: "umum", label: "General" },
 ]
 
+const ROLE_OPTIONS = ["Floor manager", "Bride assistant", "Groom assistant"]
+
+const DEFAULT_ORGANIZATION: Organizer[] = [
+  { role: "Floor manager", name: "—" },
+  { role: "Bride assistant", name: "—" },
+  { role: "Groom assistant", name: "—" },
+]
+
 const DEFAULT_SECTIONS = [
   {
     title: "Dulang P (bride's side)",
     event: "sanding",
     items: ["Cincin", "Perfume", "—", "—", "—", "—", "—"],
+    organization: DEFAULT_ORGANIZATION,
   },
   {
     title: "Dulang L (groom's side)",
     event: "sanding",
     items: ["Cincin & gelang", "Frame mas kahwin", "Perfume", "—", "—"],
+    organization: DEFAULT_ORGANIZATION,
   },
   {
     title: "Dulang boys",
     event: "sanding",
     items: ["Akmal", "Erfan / Ezad", "Jojo / Afiq / Zarif", "Idris"],
+    organization: DEFAULT_ORGANIZATION,
   },
   {
     title: "Dulang girls (7 girls)",
     event: "sanding",
     items: ["—", "—", "—", "—", "—", "—", "—"],
+    organization: DEFAULT_ORGANIZATION,
   },
   {
     title: "Flower boy & girl",
     event: "sanding",
     items: ["Flower boy: —", "Flower girl: —"],
+    organization: DEFAULT_ORGANIZATION,
   },
 ]
 
@@ -61,12 +80,10 @@ export default function PreparationPage() {
   const [editMode, setEditMode] = useState(false)
   const canEdit = isSuperadmin
 
-  // New section form
   const [title, setTitle] = useState("")
   const [event, setEvent] = useState("sanding")
-
-  // Per-section "add item" drafts
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [orgDrafts, setOrgDrafts] = useState<Record<string, Organizer>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -78,7 +95,14 @@ export default function PreparationPage() {
         setSections([])
       } else {
         setError(null)
-        setSections(data.sections)
+        setSections(
+          (data.sections ?? []).map((section: PrepSection) => ({
+            ...section,
+            organization: Array.isArray(section.organization)
+              ? section.organization
+              : [],
+          })),
+        )
       }
     } catch {
       setError("Could not reach the server.")
@@ -99,7 +123,12 @@ export default function PreparationPage() {
       const res = await fetch("/api/preparation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, event, items: [] }),
+        body: JSON.stringify({
+          title,
+          event,
+          items: [],
+          organization: DEFAULT_ORGANIZATION,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Failed to add section.")
@@ -128,9 +157,10 @@ export default function PreparationPage() {
     }
   }
 
-  // Optimistic patch of a section, then persist.
   const patchSection = async (id: string, updates: Partial<PrepSection>) => {
-    setSections((s) => s.map((x) => (x._id === id ? { ...x, ...updates } : x)))
+    setSections((s) =>
+      s.map((x) => (x._id === id ? { ...x, ...updates } : x)),
+    )
     try {
       const res = await fetch(`/api/preparation/${id}`, {
         method: "PATCH",
@@ -183,6 +213,39 @@ export default function PreparationPage() {
       items: section.items.filter((_, i) => i !== idx),
     })
 
+  const addOrganization = (section: PrepSection) => {
+    const draft = orgDrafts[section._id]
+    if (!draft || !draft.role.trim() || !draft.name.trim()) return
+    const next = [...(section.organization ?? []), { role: draft.role.trim(), name: draft.name.trim() }]
+    patchSection(section._id, { organization: next })
+    setOrgDrafts((d) => ({
+      ...d,
+      [section._id]: { role: "Floor manager", name: "" },
+    }))
+  }
+
+  const updateOrganization = (
+    section: PrepSection,
+    idx: number,
+    field: "role" | "name",
+    value: string,
+  ) => {
+    const organization = section.organization.map((entry, i) =>
+      i === idx ? { ...entry, [field]: value } : entry,
+    )
+    setSections((s) =>
+      s.map((x) => (x._id === section._id ? { ...x, organization } : x)),
+    )
+  }
+
+  const commitOrganization = (section: PrepSection) =>
+    patchSection(section._id, { organization: section.organization })
+
+  const removeOrganization = (section: PrepSection, idx: number) =>
+    patchSection(section._id, {
+      organization: section.organization.filter((_, i) => i !== idx),
+    })
+
   const filtered = useMemo(
     () =>
       filter === "semua"
@@ -203,10 +266,10 @@ export default function PreparationPage() {
           <h1 className="font-serif text-4xl text-ink">Preparation</h1>
         </Reveal>
         <Reveal delay={0.16}>
-          <p className="mx-auto mt-3 max-w-[560px] text-[14px] leading-relaxed text-muted">
-            Roles and dulang details for the sanding — flower boy & girl, dulang
-            boys & girls, and what goes on each dulang. Tap Edit to add, change
-            or remove — changes are saved automatically.
+          <p className="mx-auto mt-3 max-w-[620px] text-[14px] leading-relaxed text-muted">
+            Roles and dulang details for each event — floor manager, bride
+            assistant, groom assistant, and the items for each prep station.
+            Tap Edit to add, change or remove — changes are saved automatically.
           </p>
         </Reveal>
         {canEdit && (
@@ -230,7 +293,6 @@ export default function PreparationPage() {
         </div>
       )}
 
-      {/* Filter */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5">
           {[{ id: "semua", label: "All" }, ...EVENT_OPTIONS].map((o) => (
@@ -249,37 +311,36 @@ export default function PreparationPage() {
         </div>
       </div>
 
-      {/* Add section — only in edit mode */}
       {editMode && (
-      <form
-        onSubmit={addSection}
-        className="mb-8 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-white p-4"
-      >
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="New section (e.g. Dulang boys)…"
-          className="min-w-[200px] flex-1 rounded-full border border-line bg-cream px-4 py-2 text-[14px] outline-none focus:border-sage"
-        />
-        <select
-          value={event}
-          onChange={(e) => setEvent(e.target.value)}
-          className="rounded-full border border-line bg-white px-3 py-2 text-[13px]"
+        <form
+          onSubmit={addSection}
+          className="mb-8 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-white p-4"
         >
-          {EVENT_OPTIONS.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-full bg-sage px-5 py-2 text-[11px] uppercase tracking-[0.16em] text-white transition-transform hover:-translate-y-px disabled:opacity-50"
-        >
-          + Add section
-        </button>
-      </form>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="New section (e.g. Dulang boys)…"
+            className="min-w-[200px] flex-1 rounded-full border border-line bg-cream px-4 py-2 text-[14px] outline-none focus:border-sage"
+          />
+          <select
+            value={event}
+            onChange={(e) => setEvent(e.target.value)}
+            className="rounded-full border border-line bg-white px-3 py-2 text-[13px]"
+          >
+            {EVENT_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-full bg-sage px-5 py-2 text-[11px] uppercase tracking-[0.16em] text-white transition-transform hover:-translate-y-px disabled:opacity-50"
+          >
+            + Add section
+          </button>
+        </form>
       )}
 
       {loading ? (
@@ -322,9 +383,7 @@ export default function PreparationPage() {
                           ),
                         )
                       }
-                      onBlur={() =>
-                        patchSection(section._id, { title: section.title })
-                      }
+                      onBlur={() => patchSection(section._id, { title: section.title })}
                       className="w-full rounded-lg border border-transparent bg-transparent px-1 py-0.5 font-serif text-lg text-ink hover:border-line focus:border-sage focus:outline-none"
                     />
                   ) : (
@@ -363,9 +422,129 @@ export default function PreparationPage() {
                 )}
               </div>
 
+              <div className="mb-4 rounded-xl bg-cream p-3">
+                <div className="mb-2 text-[10px] uppercase tracking-[0.12em] text-muted">
+                  Organization
+                </div>
+                <div className="space-y-2">
+                  {(section.organization ?? []).length === 0 ? (
+                    <div className="rounded-lg bg-white px-2 py-1.5 text-[12px] text-muted">
+                      No assigned roles yet.
+                    </div>
+                  ) : (
+                    (section.organization ?? []).map((organizer, idx) => (
+                      <div
+                        key={`${section._id}-org-${idx}`}
+                        className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5"
+                      >
+                        {editMode ? (
+                          <>
+                            <select
+                              value={organizer.role}
+                              onChange={(e) =>
+                                updateOrganization(
+                                  section,
+                                  idx,
+                                  "role",
+                                  e.target.value,
+                                )
+                              }
+                              onBlur={() => commitOrganization(section)}
+                              className="w-[140px] rounded-full border border-line bg-white px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-muted"
+                            >
+                              {ROLE_OPTIONS.map((role) => (
+                                <option key={role} value={role}>
+                                  {role}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              value={organizer.name}
+                              onChange={(e) =>
+                                updateOrganization(
+                                  section,
+                                  idx,
+                                  "name",
+                                  e.target.value,
+                                )
+                              }
+                              onBlur={() => commitOrganization(section)}
+                              placeholder="Name"
+                              className="flex-1 rounded-full border border-line bg-cream px-2.5 py-1.5 text-[12px] outline-none focus:border-sage"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeOrganization(section, idx)}
+                              aria-label={`Remove ${organizer.role}`}
+                              className="text-[12px] text-muted transition-colors hover:text-red-600"
+                            >
+                              ✕
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="w-[145px] text-[10px] uppercase tracking-[0.1em] text-muted">
+                              {organizer.role}
+                            </span>
+                            <span className="flex-1 text-[13px] text-ink">
+                              {organizer.name || "—"}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {editMode && (
+                  <div className="mt-3 flex gap-2">
+                    <select
+                      value={orgDrafts[section._id]?.role ?? "Floor manager"}
+                      onChange={(e) =>
+                        setOrgDrafts((d) => ({
+                          ...d,
+                          [section._id]: {
+                            role: e.target.value,
+                            name: d[section._id]?.name ?? "",
+                          },
+                        }))
+                      }
+                      className="w-[140px] rounded-full border border-line bg-white px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-muted"
+                    >
+                      {ROLE_OPTIONS.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={orgDrafts[section._id]?.name ?? ""}
+                      onChange={(e) =>
+                        setOrgDrafts((d) => ({
+                          ...d,
+                          [section._id]: {
+                            role: d[section._id]?.role ?? "Floor manager",
+                            name: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="Name"
+                      className="flex-1 rounded-full border border-line bg-white px-3 py-1.5 text-[12px] outline-none focus:border-sage"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addOrganization(section)}
+                      className="rounded-full bg-sage px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-white"
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <ol className="mb-3 space-y-1.5">
                 {section.items.map((item, i) => (
-                  <li key={i} className="flex items-center gap-2">
+                  <li key={`${section._id}-item-${i}`} className="flex items-center gap-2">
                     <span className="w-5 shrink-0 text-right text-[11px] text-muted">
                       {i + 1}.
                     </span>
@@ -378,6 +557,7 @@ export default function PreparationPage() {
                           className="flex-1 rounded-lg border border-transparent bg-cream px-3 py-1.5 text-[13px] text-ink hover:border-line focus:border-sage focus:outline-none"
                         />
                         <button
+                          type="button"
                           onClick={() => removeItem(section, i)}
                           aria-label="Remove item"
                           className="text-muted transition-colors hover:text-red-600"
@@ -414,6 +594,7 @@ export default function PreparationPage() {
                     className="flex-1 rounded-full border border-line bg-white px-3 py-1.5 text-[13px] outline-none focus:border-sage"
                   />
                   <button
+                    type="button"
                     onClick={() => addItem(section)}
                     className="rounded-full bg-sage px-4 py-1.5 text-[11px] uppercase tracking-[0.14em] text-white transition-transform hover:-translate-y-px"
                   >

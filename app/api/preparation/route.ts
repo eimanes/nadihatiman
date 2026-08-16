@@ -16,6 +16,22 @@ const sanitizeItems = (v: unknown): string[] =>
     ? v.map((s) => (typeof s === "string" ? s.trim() : "")).filter(Boolean)
     : []
 
+const sanitizeOrganization = (v: unknown): Array<{ role: string; name: string }> => {
+  if (!Array.isArray(v)) return []
+
+  return v
+    .map((entry) => {
+      if (typeof entry !== "object" || entry === null) return null
+      const role = "role" in entry ? entry.role : undefined
+      const name = "name" in entry ? entry.name : undefined
+      if (typeof role !== "string" || typeof name !== "string") return null
+      const cleanRole = role.trim()
+      const cleanName = name.trim()
+      return cleanRole && cleanName ? { role: cleanRole, name: cleanName } : null
+    })
+    .filter((entry): entry is { role: string; name: string } => Boolean(entry))
+}
+
 export async function GET() {
   if (!isMongoConfigured()) {
     return NextResponse.json(NOT_CONFIGURED, { status: 503 })
@@ -57,10 +73,11 @@ export async function POST(req: Request) {
           (s: { title?: string }) =>
             typeof s.title === "string" && s.title.trim(),
         )
-        .map((s: { title: string; event?: string; items?: unknown }, i: number) => ({
+        .map((s: { title: string; event?: string; items?: unknown; organization?: unknown }, i: number) => ({
           title: s.title.trim(),
           event: EVENTS.includes(s.event as string) ? s.event : "sanding",
           items: sanitizeItems(s.items),
+          organization: sanitizeOrganization(s.organization),
           order: i,
           createdAt: now,
         }))
@@ -86,6 +103,7 @@ export async function POST(req: Request) {
       title,
       event: EVENTS.includes(body.event) ? body.event : "sanding",
       items: sanitizeItems(body.items),
+      organization: sanitizeOrganization(body.organization),
       order: count,
       createdAt: new Date().toISOString(),
     }

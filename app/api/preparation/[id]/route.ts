@@ -12,6 +12,22 @@ const NOT_CONFIGURED = {
 
 const EVENTS = ["nikah", "sanding", "tandang", "umum"]
 
+const sanitizeOrganization = (v: unknown): Array<{ role: string; name: string }> => {
+  if (!Array.isArray(v)) return []
+
+  return v
+    .map((entry) => {
+      if (typeof entry !== "object" || entry === null) return null
+      const role = "role" in entry ? entry.role : undefined
+      const name = "name" in entry ? entry.name : undefined
+      if (typeof role !== "string" || typeof name !== "string") return null
+      const cleanRole = role.trim()
+      const cleanName = name.trim()
+      return cleanRole && cleanName ? { role: cleanRole, name: cleanName } : null
+    })
+    .filter((entry): entry is { role: string; name: string } => Boolean(entry))
+}
+
 type Params = { params: Promise<{ id: string }> }
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -34,6 +50,9 @@ export async function PATCH(req: Request, { params }: Params) {
       updates.items = body.items
         .map((s: unknown) => (typeof s === "string" ? s.trim() : ""))
         .filter(Boolean)
+    }
+    if (Array.isArray(body.organization)) {
+      updates.organization = sanitizeOrganization(body.organization)
     }
     if (typeof body.order === "number") updates.order = body.order
     if (Object.keys(updates).length === 0) {
