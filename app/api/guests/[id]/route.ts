@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import { requireEditor } from "@/lib/admin"
+import { requirePermission } from "@/lib/permissions"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 
 export const dynamic = "force-dynamic"
@@ -18,7 +18,7 @@ export async function PATCH(
 	req: Request,
 	context: { params: Promise<{ id: string }> },
 ) {
-	const editor = await requireEditor()
+	const editor = await requirePermission("edit_guests")
 	if (!editor.ok) {
 		return NextResponse.json({ error: editor.error }, { status: editor.status })
 	}
@@ -63,7 +63,7 @@ export async function DELETE(
 	_req: Request,
 	context: { params: Promise<{ id: string }> },
 ) {
-	const editor = await requireEditor()
+	const editor = await requirePermission("edit_guests")
 	if (!editor.ok) {
 		return NextResponse.json({ error: editor.error }, { status: editor.status })
 	}

@@ -36,7 +36,38 @@ function laneLabel(id: LaneId): string {
 }
 
 type Column = { name: string; url?: string }
-type Row = { time: string; cells: { step: FlowStep; col: number }[] }
+type Row = { key: string; label: string; cells: { step: FlowStep; col: number }[] }
+
+const rowLabel = (step: FlowStep) => {
+	if (!step.startAt) return step.time || "Time to be confirmed"
+	const start = new Date(step.startAt)
+	const end = step.endAt ? new Date(step.endAt) : null
+	const date = new Intl.DateTimeFormat("en-MY", {
+		weekday: "short",
+		day: "numeric",
+		month: "short",
+	}).format(start)
+	const time = new Intl.DateTimeFormat("en-MY", {
+		hour: "numeric",
+		minute: "2-digit",
+		hour12: true,
+	})
+	const startTime = time.format(start)
+	if (!end) return `${date}\n${startTime}`
+	const sameDay = start.toDateString() === end.toDateString()
+	return sameDay
+		? `${date}\n${startTime} – ${time.format(end)}`
+		: `${date}\n${startTime} – ${new Intl.DateTimeFormat("en-MY", {
+			day: "numeric",
+			month: "short",
+			hour: "numeric",
+			minute: "2-digit",
+			hour12: true,
+		}).format(end)}`
+}
+
+const stepOrder = (step: FlowStep) =>
+	step.startAt ? new Date(step.startAt).getTime() : Number.MAX_SAFE_INTEGER
 
 /**
  * Build the location × time matrix. A step without an explicit location
@@ -46,7 +77,7 @@ function buildMatrix(steps: FlowStep[]): { columns: Column[]; rows: Row[] } {
 	const columns: Column[] = []
 	const rows: Row[] = []
 	let lastLocation = ""
-	for (const step of steps) {
+	for (const step of [...steps].sort((a, b) => stepOrder(a) - stepOrder(b))) {
 		const name = step.location?.trim() || lastLocation || "Event location"
 		lastLocation = name
 		let col = columns.findIndex((c) => c.name === name)
@@ -56,11 +87,14 @@ function buildMatrix(steps: FlowStep[]): { columns: Column[]; rows: Row[] } {
 		} else if (step.locationUrl && !columns[col].url) {
 			columns[col].url = step.locationUrl
 		}
+		const key = step.startAt
+			? `${step.startAt}-${step.endAt ?? ""}`
+			: step.time
 		const last = rows[rows.length - 1]
 		const row =
-			last && last.time === step.time
+			last && last.key === key
 				? last
-				: rows[rows.push({ time: step.time, cells: [] }) - 1]
+				: rows[rows.push({ key, label: rowLabel(step), cells: [] }) - 1]
 		row.cells.push({ step, col })
 	}
 	return { columns, rows }
@@ -182,12 +216,14 @@ export default function SwimLane({ event }: { event: WeddingEvent }) {
 
 					{/* Rows: time header (left) + cards at (time, location) */}
 					{rows.map((row, ri) => (
-						<Fragment key={`${row.time}-${ri}`}>
+						<Fragment key={`${row.key}-${ri}`}>
 							<div
 								className="sticky left-0 z-10 flex items-center justify-center rounded-xl border border-line bg-white px-2 py-2 text-center text-[12px] font-semibold leading-tight text-sage"
 								style={{ gridRow: ri + 2, gridColumn: 1 }}
 							>
-								{row.time}
+								{row.label.split("\n").map((line) => (
+									<span key={line} className="block">{line}</span>
+								))}
 							</div>
 							{columns.map((_, ci) => {
 								const cells = row.cells.filter((c) => c.col === ci)

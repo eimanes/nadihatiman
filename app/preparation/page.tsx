@@ -1,9 +1,8 @@
 "use client"
 
-import { useUser } from "@clerk/nextjs"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Reveal from "@/components/Reveal"
-import { isEditorEmail } from "@/lib/admin-emails"
+import { usePermissions } from "@/hooks/usePermissions"
 
 type PrepSection = {
   _id: string
@@ -53,14 +52,14 @@ const EVENT_BADGE = (id: string) =>
   EVENT_OPTIONS.find((o) => o.id === id)?.label ?? id
 
 export default function PreparationPage() {
-  const { user } = useUser()
+  const { isSuperadmin } = usePermissions()
   const [sections, setSections] = useState<PrepSection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [filter, setFilter] = useState("semua")
   const [editMode, setEditMode] = useState(false)
-  const canEdit = isEditorEmail(user?.primaryEmailAddress?.emailAddress)
+  const canEdit = isSuperadmin
 
   // New section form
   const [title, setTitle] = useState("")
@@ -201,7 +200,7 @@ export default function PreparationPage() {
           </p>
         </Reveal>
         <Reveal delay={0.08}>
-          <h1 className="font-serif text-4xl text-ink">Sanding preparation</h1>
+          <h1 className="font-serif text-4xl text-ink">Preparation</h1>
         </Reveal>
         <Reveal delay={0.16}>
           <p className="mx-auto mt-3 max-w-[560px] text-[14px] leading-relaxed text-muted">

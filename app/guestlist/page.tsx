@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import CanvaEmbed from "@/components/CanvaEmbed"
 import { site, type Guestlist } from "@/content/site"
+import { usePermissions } from "@/hooks/usePermissions"
 
 type Guest = {
 	_id: string
@@ -145,12 +146,14 @@ function rowsToGuests(rows: string[][]): ImportedGuest[] {
 }
 
 export default function GuestlistPage() {
+	const { can } = usePermissions()
 	const [guests, setGuests] = useState<Guest[]>([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const [saving, setSaving] = useState(false)
 	const [importing, setImporting] = useState(false)
 	const [importInfo, setImportInfo] = useState<string | null>(null)
+	const canEdit = can("edit_guests")
 
 	// Filters
 	const [filterEvent, setFilterEvent] = useState<"semua" | Guest["event"]>("semua")
@@ -302,8 +305,9 @@ export default function GuestlistPage() {
 				</p>
 				<h1 className="font-serif text-4xl text-ink">Our guests</h1>
 				<p className="mx-auto mt-3 max-w-[560px] text-[14px] leading-relaxed text-muted">
-					The guest list is saved — add, update attendance status,
-					and delete directly from the table below.
+					{canEdit
+						? "The guest list is saved — add, update attendance status, and delete directly from the table below."
+						: "The guest list for all our celebrations."}
 				</p>
 			</header>
 
@@ -314,7 +318,7 @@ export default function GuestlistPage() {
 			)}
 
 			{/* Add guest */}
-			<form
+			{canEdit && <form
 				onSubmit={addGuest}
 				className="mb-8 grid gap-3 rounded-2xl border border-line bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,.04)] md:grid-cols-[1fr_150px_150px_90px_160px_auto]"
 			>
@@ -363,7 +367,7 @@ export default function GuestlistPage() {
 				>
 					{saving ? "Saving…" : "+ Add"}
 				</button>
-			</form>
+			</form>}
 
 			{/* Filters + stats */}
 			<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -445,7 +449,7 @@ export default function GuestlistPage() {
 										)}
 									</td>
 									<td className="px-4 py-3">
-										<select
+										{canEdit ? <select
 											className="rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage"
 											value={g.event}
 											onChange={(e) =>
@@ -457,10 +461,10 @@ export default function GuestlistPage() {
 													{l}
 												</option>
 											))}
-										</select>
+										</select> : <span className="text-[13px] text-muted">{EVENT_LABEL[g.event]}</span>}
 									</td>
 									<td className="px-4 py-3">
-										<select
+										{canEdit ? <select
 											className="rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage"
 											value={g.side}
 											onChange={(e) =>
@@ -472,10 +476,10 @@ export default function GuestlistPage() {
 													{l}
 												</option>
 											))}
-										</select>
+										</select> : <span className="text-[13px] text-muted">{SIDE_LABEL[g.side]}</span>}
 									</td>
 									<td className="px-4 py-3">
-										<input
+										{canEdit ? <input
 											type="number"
 											min={1}
 											className="w-16 rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage"
@@ -483,11 +487,11 @@ export default function GuestlistPage() {
 											onChange={(e) =>
 												patchGuest(g._id, { pax: Number(e.target.value) || 1 })
 											}
-										/>
+										/> : <span className="text-[13px] text-muted">{g.pax}</span>}
 									</td>
 									<td className="px-4 py-3 text-[13px] text-muted">{g.phone || "—"}</td>
 									<td className="px-4 py-3">
-										<select
+										{canEdit ? <select
 											className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}
 											value={g.status}
 											onChange={(e) =>
@@ -501,17 +505,17 @@ export default function GuestlistPage() {
 													{m.label}
 												</option>
 											))}
-										</select>
+										</select> : <span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>}
 									</td>
 									<td className="px-4 py-3 text-right">
-										<button
+										{canEdit && <button
 											type="button"
 											onClick={() => removeGuest(g._id)}
 											className="rounded-full px-2 py-1 text-[12px] text-muted transition-colors hover:bg-[#FBEFEE] hover:text-[#A0524B]"
 											aria-label={`Delete ${g.name}`}
 										>
 											✕
-										</button>
+										</button>}
 									</td>
 								</tr>
 							))
@@ -522,7 +526,7 @@ export default function GuestlistPage() {
 
 			{/* Canva is the source of truth. Import its exported guest data (CSV)
 			    into the project so it renders in the table above and is saved. */}
-			<section className="mt-10 rounded-2xl border border-line bg-white p-5">
+			{canEdit && <section className="mt-10 rounded-2xl border border-line bg-white p-5">
 				<div className="flex flex-wrap items-start justify-between gap-4">
 					<div>
 						<h2 className="font-serif text-lg text-ink">
@@ -559,12 +563,12 @@ export default function GuestlistPage() {
 						{importInfo}
 					</p>
 				)}
-			</section>
+			</section>}
 
 			{/* Canva reference (read-only, auto-refresh — never edits the design).
 			    Expanded by default; the user can collapse it. Stacked one per row
 			    (Sanding first, then Tandang). */}
-			<details open className="mt-6 rounded-2xl border border-line bg-white p-5">
+			<details open className={`${canEdit ? "mt-6" : "mt-10"} rounded-2xl border border-line bg-white p-5`}>
 				<summary className="cursor-pointer font-serif text-lg text-ink">
 					📎 Original Canva reference (read-only, auto-refresh)
 				</summary>

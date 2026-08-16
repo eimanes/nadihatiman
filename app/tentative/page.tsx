@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import Link from "next/link"
+import ScheduleEditLink from "@/components/ScheduleEditLink"
 import SwimLane from "@/components/SwimLane"
 import Reveal from "@/components/Reveal"
 import { site } from "@/content/site"
@@ -33,12 +33,7 @@ export default async function TentativePage() {
           </p>
         </Reveal>
         <Reveal delay={0.24}>
-          <Link
-            href="/admin"
-            className="mt-5 inline-block rounded-full bg-sage px-6 py-2.5 text-[11px] uppercase tracking-[0.16em] text-white transition-transform hover:-translate-y-px"
-          >
-            ✏️ Edit schedule
-          </Link>
+          <ScheduleEditLink />
         </Reveal>
       </header>
 

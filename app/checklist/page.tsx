@@ -1,9 +1,8 @@
 "use client"
 
-import { useUser } from "@clerk/nextjs"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Reveal from "@/components/Reveal"
-import { isEditorEmail } from "@/lib/admin-emails"
+import { usePermissions } from "@/hooks/usePermissions"
 
 type ChecklistItem = {
   _id: string
@@ -48,7 +47,7 @@ const DEFAULT_ITEMS = [
 ]
 
 export default function ChecklistPage() {
-  const { user } = useUser()
+  const { can } = usePermissions()
   const [items, setItems] = useState<ChecklistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -58,7 +57,7 @@ export default function ChecklistPage() {
   const [category, setCategory] = useState("Preparation")
   const [busy, setBusy] = useState(false)
   const [editMode, setEditMode] = useState(false)
-  const canEdit = isEditorEmail(user?.primaryEmailAddress?.emailAddress)
+  const canEdit = can("edit_checklist")
 
   const load = useCallback(async () => {
     setLoading(true)

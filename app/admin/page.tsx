@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { usePermissions } from "@/hooks/usePermissions"
 import type {
   FlowStep,
   Guestlist,
@@ -31,10 +32,71 @@ const chipBtn =
   "rounded-full border border-line bg-white px-3 py-1 text-[11px] text-muted transition-colors hover:text-ink"
 
 function emptyStep(): FlowStep {
-  return { time: "", title: "", detail: "", location: "", locationUrl: "", lanes: ["groom", "bride", "family"] }
+  return {
+    time: "",
+    startAt: "",
+    endAt: "",
+    title: "",
+    detail: "",
+    location: "",
+    locationUrl: "",
+    lanes: ["groom", "bride", "family"],
+  }
+}
+
+const displayDate = (date: string) =>
+  new Intl.DateTimeFormat("en-MY", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${date}T12:00:00`))
+
+const isoDate = (value: string | null) => value?.slice(0, 10) ?? ""
+const isoTime = (value: string | null) => value?.slice(11, 16) ?? ""
+
+const updateEventDateTime = (
+  event: WeddingEvent,
+  date: string,
+  time: string,
+): Partial<WeddingEvent> => ({
+  dateDisplay: date ? displayDate(date) : event.dateDisplay,
+  dateIso: date && time ? `${date}T${time}:00+08:00` : null,
+})
+
+const inputDateTime = (value?: string) =>
+  value ? value.slice(0, 16) : ""
+
+const stepTimeDisplay = (startAt?: string, endAt?: string) => {
+  if (!startAt) return ""
+  const start = new Date(startAt)
+  const end = endAt ? new Date(endAt) : null
+  const date = new Intl.DateTimeFormat("en-MY", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(start)
+  const time = new Intl.DateTimeFormat("en-MY", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+  const startTime = time.format(start)
+  if (!end) return `${date} · ${startTime}`
+  const sameDay = start.toDateString() === end.toDateString()
+  return sameDay
+    ? `${date} · ${startTime} – ${time.format(end)}`
+    : `${date} · ${startTime} – ${new Intl.DateTimeFormat("en-MY", {
+        day: "numeric",
+        month: "short",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(end)}`
 }
 
 export default function AdminPage() {
+  const { isSuperadmin, can, loaded: permissionsLoaded } = usePermissions()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [configured, setConfigured] = useState(true)
   const [persisted, setPersisted] = useState(false)
@@ -45,6 +107,18 @@ export default function AdminPage() {
     "events" | "invitations" | "guestlists" | "budget"
   >("events")
   const [eventIdx, setEventIdx] = useState(0)
+  const canEditSchedule = isSuperadmin || can("edit_schedule")
+  const canEditBudget = isSuperadmin || can("edit_budget")
+  const availableTabs: { id: "events" | "invitations" | "guestlists" | "budget"; label: string }[] = [
+    ...(canEditSchedule
+      ? [
+          { id: "events" as const, label: "Events & Schedule" },
+          { id: "invitations" as const, label: "Invitations" },
+          { id: "guestlists" as const, label: "Guestlist" },
+        ]
+      : []),
+    ...(canEditBudget ? [{ id: "budget" as const, label: "Budget" }] : []),
+  ]
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -64,6 +138,13 @@ export default function AdminPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (!permissionsLoaded) return
+    if (!availableTabs.some((item) => item.id === tab)) {
+      setTab(availableTabs[0]?.id ?? "events")
+    }
+  }, [permissionsLoaded, tab, availableTabs])
 
   /* ── immutable update helpers ── */
 
@@ -122,7 +203,7 @@ export default function AdminPage() {
   /* ── save ── */
 
   const save = async () => {
-    if (!settings || saving) return
+    if (!settings || saving || (!canEditSchedule && !canEditBudget)) return
     setSaving(true)
     setMessage(null)
     try {
@@ -137,6 +218,20 @@ export default function AdminPage() {
             swatches: dc.swatches.map((s) => s.trim()).filter(Boolean),
           })),
         })),
+      }
+      const invalidStep = payload.events
+        .flatMap((event) => [...event.preSteps, ...event.flow])
+        .find(
+          (step) =>
+            step.startAt && step.endAt &&
+            new Date(step.endAt).getTime() <= new Date(step.startAt).getTime(),
+        )
+      if (invalidStep) {
+        setMessage({
+          kind: "err",
+          text: `End time must be after start time for “${invalidStep.title || "untitled step"}”.`,
+        })
+        return
       }
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -201,12 +296,41 @@ export default function AdminPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={label}>
-                Time
+                Start date & time
                 <input
+                  type="datetime-local"
                   className={input}
-                  value={st.time}
-                  onChange={(e) => updateStep(kind, si, { time: e.target.value })}
-                  placeholder="e.g. 8:00 AM"
+                  value={inputDateTime(st.startAt)}
+                  onChange={(e) => {
+                    const startAt = e.target.value
+                    updateStep(kind, si, {
+                      startAt,
+                      time: stepTimeDisplay(startAt, st.endAt),
+                    })
+                  }}
+                />
+              </label>
+              <label className={label}>
+                End date & time
+                <input
+                  type="datetime-local"
+                  min={inputDateTime(st.startAt) || undefined}
+                  className={input}
+                  value={inputDateTime(st.endAt)}
+                  onChange={(e) => {
+                    const endAt = e.target.value
+                    if (
+                      st.startAt && endAt &&
+                      new Date(endAt).getTime() <= new Date(st.startAt).getTime()
+                    ) {
+                      setMessage({ kind: "err", text: "End time must be after start time." })
+                      return
+                    }
+                    updateStep(kind, si, {
+                      endAt,
+                      time: stepTimeDisplay(st.startAt, endAt),
+                    })
+                  }}
                 />
               </label>
               <label className={label}>
@@ -218,6 +342,17 @@ export default function AdminPage() {
                   placeholder="e.g. Gather at the masjid"
                 />
               </label>
+              {!st.startAt && (
+                <label className={label}>
+                  Legacy time display
+                  <input
+                    className={input}
+                    value={st.time}
+                    onChange={(e) => updateStep(kind, si, { time: e.target.value })}
+                    placeholder="e.g. 8:00 AM"
+                  />
+                </label>
+              )}
               <label className={`${label} sm:col-span-2`}>
                 Details (optional)
                 <input
@@ -299,14 +434,7 @@ export default function AdminPage() {
       {/* Tabs + save */}
       <div className="sticky top-20 z-30 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-full border border-line bg-white/90 px-3 py-2 backdrop-blur">
         <div className="flex gap-1.5">
-          {(
-            [
-              ["events", "Events & Schedule"],
-              ["invitations", "Invitations"],
-              ["guestlists", "Guestlist"],
-              ["budget", "Budget"],
-            ] as const
-          ).map(([id, lbl]) => (
+          {availableTabs.map(({ id, label: lbl }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -328,13 +456,13 @@ export default function AdminPage() {
               {message.text}
             </span>
           )}
-          <button
-            onClick={save}
-            disabled={saving}
-            className="rounded-full bg-sage px-6 py-2 text-[11px] uppercase tracking-[0.16em] text-white transition-transform hover:-translate-y-px disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "💾 Save"}
-          </button>
+          {(canEditSchedule || canEditBudget) && <button
+              onClick={save}
+              disabled={saving}
+              className="rounded-full bg-sage px-6 py-2 text-[11px] uppercase tracking-[0.16em] text-white transition-transform hover:-translate-y-px disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "💾 Save"}
+            </button>}
         </div>
       </div>
 
@@ -388,25 +516,35 @@ export default function AdminPage() {
                 />
               </label>
               <label className={label}>
-                Date (display)
+                Date
                 <input
+                  type="date"
                   className={input}
-                  value={ev.dateDisplay}
-                  onChange={(e) => updateEvent(eventIdx, { dateDisplay: e.target.value })}
-                  placeholder="e.g. Sunday, 4 October 2026"
+                  value={isoDate(ev.dateIso)}
+                  onChange={(e) =>
+                    updateEvent(
+                      eventIdx,
+                      updateEventDateTime(ev, e.target.value, isoTime(ev.dateIso)),
+                    )
+                  }
                 />
               </label>
               <label className={label}>
-                ISO date (for countdown)
+                Start time
                 <input
+                  type="time"
                   className={input}
-                  value={ev.dateIso ?? ""}
-                  onChange={(e) => updateEvent(eventIdx, { dateIso: e.target.value })}
-                  placeholder="e.g. 2026-10-04T11:00:00+08:00 (empty = none)"
+                  value={isoTime(ev.dateIso)}
+                  onChange={(e) =>
+                    updateEvent(
+                      eventIdx,
+                      updateEventDateTime(ev, isoDate(ev.dateIso), e.target.value),
+                    )
+                  }
                 />
               </label>
               <label className={`${label} sm:col-span-2`}>
-                Time (display)
+                Event time (public display)
                 <input
                   className={input}
                   value={ev.timeDisplay}

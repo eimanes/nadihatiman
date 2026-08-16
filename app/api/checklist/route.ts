@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireEditor } from "@/lib/admin"
+import { requirePermission } from "@/lib/permissions"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 
 export const dynamic = "force-dynamic"
@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const editor = await requireEditor()
+  const editor = await requirePermission("edit_checklist")
   if (!editor.ok) {
     return NextResponse.json({ error: editor.error }, { status: editor.status })
   }

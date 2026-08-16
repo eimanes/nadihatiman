@@ -5,9 +5,10 @@ import { UserButton, useUser } from "@clerk/nextjs"
 import { usePathname } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { site } from "@/content/site"
+import { usePermissions } from "@/hooks/usePermissions"
 
 /** Hrefs shown inline in the top bar; the rest live in the hamburger menu. */
-const PRIMARY_HREFS = ["/", "/tentative", "/invitations", "/guestlist"]
+const PRIMARY_HREFS = ["/home", "/tentative", "/invitations", "/guestlist"]
 
 /**
  * Floating pill navigation for the planner. Starts wide at the top of the
@@ -18,6 +19,7 @@ const PRIMARY_HREFS = ["/", "/tentative", "/invitations", "/guestlist"]
  */
 export default function PlannerNav() {
   const { isSignedIn } = useUser()
+  const { can, isSuperadmin } = usePermissions()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const pathname = usePathname()
@@ -55,11 +57,12 @@ export default function PlannerNav() {
   }, [menuOpen])
 
   const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href)
+    href === "/home" ? pathname === "/home" : pathname.startsWith(href)
 
-  const primaryLinks = site.nav.links.filter((l) =>
-    PRIMARY_HREFS.includes(l.href),
+  const visibleLinks = site.nav.links.filter(
+    (link) => link.href !== "/budget" || can("view_budget"),
   )
+  const primaryLinks = visibleLinks.filter((link) => PRIMARY_HREFS.includes(link.href))
 
   return (
     <div className="fixed inset-x-0 top-4 z-40 flex justify-center px-4">
@@ -141,7 +144,7 @@ export default function PlannerNav() {
 
             {menuOpen && (
               <div className="absolute right-0 top-[calc(100%+10px)] w-56 overflow-hidden rounded-2xl border border-line bg-white/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,.14)] backdrop-blur-md">
-                {site.nav.links.map((link) => (
+                {visibleLinks.map((link) => (
                   <Link
                     key={link.label}
                     href={link.href}
@@ -155,6 +158,22 @@ export default function PlannerNav() {
                     {link.label}
                   </Link>
                 ))}
+                {isSuperadmin && (
+                  <>
+                    <Link href="/home#edit-home" onClick={() => setMenuOpen(false)} className="block rounded-xl px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-sage-soft">Edit home</Link>
+                    <Link
+                      href="/accounts"
+                      onClick={() => setMenuOpen(false)}
+                      className={`block rounded-xl px-4 py-2.5 text-[13px] transition-colors ${
+                        isActive("/accounts")
+                          ? "bg-sage text-white"
+                          : "text-ink hover:bg-sage-soft"
+                      }`}
+                    >
+                      Other accounts
+                    </Link>
+                  </>
+                )}
               </div>
             )}
           </div>

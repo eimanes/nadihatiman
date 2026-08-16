@@ -3,6 +3,7 @@
 import Image from "next/image"
 import { useRef } from "react"
 import { site } from "@/content/site"
+import { useHomeContent } from "@/components/HomeContentProvider"
 import { clamp, smoothstep, usePinProgress } from "@/components/usePinProgress"
 
 // Side photos of the collage: position + when they appear (scroll progress).
@@ -21,6 +22,7 @@ const SIDE = [
  * Scrolling back up reverses everything.
  */
 export default function Hero({ entered }: { entered: boolean }) {
+	const { content, language } = useHomeContent()
 	const outerRef = useRef<HTMLDivElement>(null)
 	const p = usePinProgress(outerRef)
 
@@ -82,7 +84,7 @@ export default function Hero({ entered }: { entered: boolean }) {
 						style={{ opacity: namesOpacity, pointerEvents: "none" }}
 					>
 						<p className="mb-4 text-[11px] uppercase tracking-[0.3em] text-white/85 md:mb-5 md:text-xs md:tracking-[0.34em]">
-							{site.landing.hero.eyebrow}
+							{content[language].heroEyebrow}
 						</p>
 						<h1 className="max-w-full font-serif text-[clamp(40px,9vw,110px)] leading-[1.05] tracking-wide">
 							{site.couple.bride}{" "}
@@ -90,7 +92,7 @@ export default function Hero({ entered }: { entered: boolean }) {
 							{site.couple.groom}
 						</h1>
 						<p className="mt-3 font-serif text-base italic text-white/85 md:mt-4 md:text-lg">
-							{site.landing.hero.subtitle}
+							{content[language].heroSubtitle}
 						</p>
 					</div>
 				</div>

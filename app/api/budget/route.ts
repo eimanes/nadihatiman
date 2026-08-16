@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requirePermission } from "@/lib/permissions"
 import { loadSettings } from "@/lib/settings"
 
 export const dynamic = "force-dynamic"
@@ -69,6 +70,10 @@ const toNumber = (s: string | undefined): number => {
 }
 
 export async function GET() {
+	const viewer = await requirePermission("view_budget")
+	if (!viewer.ok) {
+		return NextResponse.json({ error: viewer.error }, { status: viewer.status })
+	}
 	const { settings } = await loadSettings()
 	const sheetUrl = settings.budgetSheetUrl || process.env.BUDGET_SHEET_URL || ""
 	if (!sheetUrl) {

@@ -18,6 +18,10 @@ export type Lane = {
 export type FlowStep = {
   /** Display time, e.g. "8:00 AM" */
   time: string
+  /** ISO start date-time used for editor navigation and multi-day schedules. */
+  startAt?: string
+  /** ISO end date-time. Must be after startAt when both are set. */
+  endAt?: string
   title: string
   detail?: string
   location?: string
@@ -165,7 +169,7 @@ export const site = {
 
   nav: {
     links: [
-      { label: "Home", href: "/" },
+      { label: "Home", href: "/home" },
       { label: "Schedule", href: "/tentative" },
       { label: "Invitations", href: "/invitations" },
       { label: "Guests", href: "/guestlist" },

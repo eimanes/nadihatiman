@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireEditor } from "@/lib/admin"
+import { requireAnyPermission } from "@/lib/permissions"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 import { loadSettings } from "@/lib/settings"
 
@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const editor = await requireEditor()
+  const editor = await requireAnyPermission(["edit_schedule", "edit_budget"])
   if (!editor.ok) {
     return NextResponse.json({ error: editor.error }, { status: editor.status })
   }
@@ -25,27 +25,26 @@ export async function PUT(req: Request) {
   }
   try {
     const body = await req.json()
-    const { events, invitations, guestlists } = body
-    if (
-      !Array.isArray(events) ||
-      !Array.isArray(invitations) ||
-      !Array.isArray(guestlists)
-    ) {
+    const canEditSchedule = editor.viewer.permissions.includes("edit_schedule")
+    const canEditBudget = editor.viewer.permissions.includes("edit_budget")
+    const { events, invitations, guestlists, budgetSheetUrl } = body
+    if (canEditSchedule && (!Array.isArray(events) || !Array.isArray(invitations) || !Array.isArray(guestlists))) {
       return NextResponse.json(
         { error: "Invalid format: events, invitations and guestlists are required." },
         { status: 400 },
       )
     }
+    if (canEditBudget && budgetSheetUrl !== undefined && typeof budgetSheetUrl !== "string") {
+      return NextResponse.json({ error: "Invalid budget sheet URL." }, { status: 400 })
+    }
     const db = await getDb()
+    const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() }
+    if (canEditSchedule) Object.assign(updates, { events, invitations, guestlists })
+    if (canEditBudget && typeof budgetSheetUrl === "string") updates.budgetSheetUrl = budgetSheetUrl.trim()
     await db.collection("settings").updateOne(
       { key: "site" },
       {
-        $set: {
-          events,
-          invitations,
-          guestlists,
-          updatedAt: new Date().toISOString(),
-        },
+        $set: updates,
       },
       { upsert: true },
     )

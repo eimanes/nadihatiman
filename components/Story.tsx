@@ -3,6 +3,7 @@
 import Image from "next/image"
 import { useRef } from "react"
 import { site } from "@/content/site"
+import { useHomeContent } from "@/components/HomeContentProvider"
 import { clamp, usePinProgress } from "@/components/usePinProgress"
 
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
@@ -15,9 +16,13 @@ const ROTATIONS = [-4, 3, -2]
  * once the polaroid lands on the stack. Fully reversible on scroll-up.
  */
 export default function Story() {
+	const { content, language } = useHomeContent()
 	const outerRef = useRef<HTMLDivElement>(null)
 	const progress = usePinProgress(outerRef)
-	const chapters = site.landing.story.chapters
+	const chapters = site.landing.story.chapters.map((chapter, index) => ({
+		...chapter,
+		...content[language].storyChapters[index],
+	}))
 	const n = chapters.length
 
 	return (
@@ -27,10 +32,10 @@ export default function Story() {
 					{/* Row 1: heading (extra top padding so the fixed nav never overlaps it) */}
 					<div className="pointer-events-none z-30 pt-24 text-center md:pt-28">
 						<p className="mb-2 text-xs uppercase tracking-[0.3em] text-gold md:mb-3">
-							{site.landing.story.label}
+							{content[language].storyLabel}
 						</p>
 						<h2 className="font-serif text-[clamp(30px,5vw,52px)] leading-tight">
-							{site.landing.story.title}
+							{content[language].storyTitle}
 						</h2>
 					</div>
 
