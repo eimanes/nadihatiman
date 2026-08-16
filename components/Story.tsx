@@ -22,6 +22,8 @@ export default function Story() {
 	const chapters = site.landing.story.chapters.map((chapter, index) => ({
 		...chapter,
 		...content[language].storyChapters[index],
+		image: content.images.story[index]?.url || chapter.image,
+		mediaType: content.images.story[index]?.type || "image",
 	}))
 	const n = chapters.length
 
@@ -56,13 +58,7 @@ export default function Story() {
 									}}
 								>
 									<div className="relative aspect-square overflow-hidden bg-sage-soft">
-										<Image
-											src={chapter.image}
-											alt={chapter.imageAlt}
-											fill
-											sizes="(max-width: 820px) 62vw, 360px"
-											className="object-cover"
-										/>
+										{chapter.mediaType === "video" ? <video src={chapter.image} autoPlay muted loop playsInline className="h-full w-full object-cover" /> : <Image src={chapter.image} alt={chapter.imageAlt} fill sizes="(max-width: 820px) 62vw, 360px" className="object-cover" />}
 									</div>
 									<figcaption className="absolute inset-x-2 bottom-4 truncate text-center font-serif text-base italic text-ink/75 md:text-lg">
 										{chapter.title}

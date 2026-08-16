@@ -9,7 +9,19 @@ export type HomeCopy = {
   storyChapters: { kicker: string; title: string; text: string }[]
 }
 
-export type HomeContent = Record<Language, HomeCopy>
+export type ManagedMedia = {
+  url: string
+  publicId?: string
+  type?: "image" | "video"
+}
+
+export type HomeImages = {
+  hero: ManagedMedia
+  story: ManagedMedia[]
+  collage: ManagedMedia[]
+}
+
+export type HomeContent = Record<Language, HomeCopy> & { images: HomeImages }
 
 export const defaultHomeContent: HomeContent = {
   en: {
@@ -36,13 +48,29 @@ export const defaultHomeContent: HomeContent = {
       { kicker: "Bab Tiga", title: "langkah seterusnya", text: "Satu soalan, satu jawapan yang mudah — ya. Kini kami menjemput semua yang tersayang untuk meraikan permulaan bab baharu: NADIhatIMAN." },
     ],
   },
+  images: {
+    hero: { url: "/images/hero.jpg", type: "image" },
+    story: [
+      { url: "/images/chapter-1.jpg", type: "image" },
+      { url: "/images/chapter-2.jpg", type: "image" },
+      { url: "/images/chapter-3.jpg", type: "image" },
+    ],
+    collage: [
+      { url: "/images/gallery-1.jpg", type: "image" },
+      { url: "/images/gallery-3.jpg", type: "image" },
+      { url: "/images/gallery-4.jpg", type: "image" },
+      { url: "/images/gallery-9.jpg", type: "image" },
+    ],
+  },
 }
 
 export const isHomeContent = (value: unknown): value is HomeContent => {
   if (!value || typeof value !== "object") return false
   const content = value as Partial<HomeContent>
-  return ["en", "ms"].every((language) => {
+  const hasCopies = ["en", "ms"].every((language) => {
     const copy = content[language as Language]
     return Boolean(copy && typeof copy.heroEyebrow === "string" && typeof copy.heroSubtitle === "string" && typeof copy.ticker === "string" && typeof copy.storyLabel === "string" && typeof copy.storyTitle === "string" && Array.isArray(copy.storyChapters))
   })
+  const images = content.images
+  return Boolean(hasCopies && images && typeof images.hero?.url === "string" && Array.isArray(images.story) && Array.isArray(images.collage))
 }

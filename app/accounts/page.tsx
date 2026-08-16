@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { usePermissions } from "@/hooks/usePermissions"
-import { BOOTSTRAP_SUPERADMIN_EMAIL, PERMISSIONS, type Permission } from "@/lib/permission-types"
+import { DEFAULT_SUPERADMIN_EMAILS, PERMISSIONS, type Permission } from "@/lib/permission-types"
 
 const LABELS: Record<Permission, string> = {
   edit_schedule: "Edit schedule",
@@ -116,10 +116,7 @@ export default function AccountsPage() {
           These accounts have permanent full access and cannot be changed here.
         </p>
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-          <li className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-[13px] text-ink">
-            <span>{BOOTSTRAP_SUPERADMIN_EMAIL}</span>
-            <span className="text-[10px] uppercase tracking-[0.12em] text-gold">Owner · full access</span>
-          </li>
+          {DEFAULT_SUPERADMIN_EMAILS.map((email) => <li key={email} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-[13px] text-ink"><span>{email}</span><span className="text-[10px] uppercase tracking-[0.12em] text-gold">Owner · full access</span></li>)}
           {accounts.filter((account) => account.role === "superadmin").map((account) => (
             <li key={account._id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-[13px] text-ink">
               <span>{account.email}</span>

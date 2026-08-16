@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import Countdown from "@/components/Countdown"
 import Hero from "@/components/Hero"
-import HomeContentEditor from "@/components/HomeContentEditor"
 import { HomeContentProvider } from "@/components/HomeContentProvider"
 import LanguageToggle from "@/components/LanguageToggle"
 import Reveal from "@/components/Reveal"
@@ -53,8 +52,8 @@ function HomeContent() {
       <Story />
 
       <section className="mx-auto max-w-[1080px] px-5 pb-24 pt-16">
-        {isSuperadmin && <div className="mb-5 flex justify-end"><a href="#edit-home" className="rounded-full border border-line bg-white px-4 py-2 text-[11px] uppercase tracking-[0.14em] text-ink shadow-[0_1px_2px_rgba(0,0,0,.04)] hover:bg-sage-soft">✏️ Edit home</a></div>}
-        <div className="mb-12 grid gap-4 lg:grid-cols-3">
+        {isSuperadmin && <div className="mb-5 flex justify-end"><Link href="/home/edit" className="rounded-full border border-line bg-white px-4 py-2 text-[11px] uppercase tracking-[0.14em] text-ink shadow-[0_1px_2px_rgba(0,0,0,.04)] hover:bg-sage-soft">✏️ Edit home</Link></div>}
+        <div className="mx-auto mb-12 grid max-w-[620px] grid-cols-1 gap-4">
           {COUNTDOWNS.map((countdown, index) => (
             <Reveal key={countdown.id} delay={index * 0.08}>
               <section className="h-full rounded-2xl border border-line bg-white px-5 py-6 text-center shadow-[0_1px_2px_rgba(0,0,0,.04)]">
@@ -107,7 +106,6 @@ function HomeContent() {
         </Reveal>
       </section>
       <LanguageToggle />
-      <HomeContentEditor />
     </>
   )
 }

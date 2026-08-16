@@ -21,7 +21,7 @@ export async function GET() {
   return NextResponse.json({
     accounts: accounts.map((account) => ({ ...account, _id: account._id.toString() })),
     permissions: PERMISSIONS,
-    bootstrapSuperadmin: "es.swimmer15@gmail.com",
+    defaultSuperadmins: ["es.swimmer15@gmail.com", "eimansalleh.5@gmail.com", "eimansalleh.15@gmail.com", "nadiaazamiera99@gmail.com"],
   })
 }
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 import { PERMISSIONS, requireSuperadmin } from "@/lib/permissions"
-import { BOOTSTRAP_SUPERADMIN_EMAIL } from "@/lib/permission-types"
+import { DEFAULT_SUPERADMIN_EMAILS } from "@/lib/permission-types"
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -25,8 +25,8 @@ export async function PATCH(req: Request, { params }: Params) {
   const existing = await db.collection("account_permissions").findOne({ _id: new ObjectId(id) })
   if (!existing) return NextResponse.json({ error: "Account not found." }, { status: 404 })
   const role = body.role === "superadmin" ? "superadmin" : "account"
-  if (existing.email === BOOTSTRAP_SUPERADMIN_EMAIL && role !== "superadmin") {
-    return NextResponse.json({ error: "The bootstrap superadmin cannot be removed." }, { status: 400 })
+  if (DEFAULT_SUPERADMIN_EMAILS.includes(existing.email as (typeof DEFAULT_SUPERADMIN_EMAILS)[number]) && role !== "superadmin") {
+    return NextResponse.json({ error: "A default superadmin cannot be demoted." }, { status: 400 })
   }
   if (existing.role === "superadmin" && role !== "superadmin") {
     const count = await db.collection("account_permissions").countDocuments({ role: "superadmin" })
@@ -51,8 +51,8 @@ export async function DELETE(_req: Request, { params }: Params) {
   const db = await getDb()
   const existing = await db.collection("account_permissions").findOne({ _id: new ObjectId(id) })
   if (!existing) return NextResponse.json({ error: "Account not found." }, { status: 404 })
-  if (existing.email === BOOTSTRAP_SUPERADMIN_EMAIL) {
-    return NextResponse.json({ error: "The bootstrap superadmin cannot be removed." }, { status: 400 })
+  if (DEFAULT_SUPERADMIN_EMAILS.includes(existing.email as (typeof DEFAULT_SUPERADMIN_EMAILS)[number])) {
+    return NextResponse.json({ error: "A default superadmin cannot be removed." }, { status: 400 })
   }
   if (existing.role === "superadmin") {
     const count = await db.collection("account_permissions").countDocuments({ role: "superadmin" })

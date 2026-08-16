@@ -1,6 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
-import { BOOTSTRAP_SUPERADMIN_EMAIL, PERMISSIONS, type Permission, type ViewerPermissions } from "@/lib/permission-types"
+import { DEFAULT_SUPERADMIN_EMAILS, PERMISSIONS, type Permission, type ViewerPermissions } from "@/lib/permission-types"
 
 export { PERMISSIONS, type Permission, type ViewerPermissions } from "@/lib/permission-types"
 
@@ -24,7 +24,7 @@ export async function getViewerPermissions(): Promise<ViewerPermissions> {
   if (!email) {
     return { signedIn: true, email: null, isSuperadmin: false, permissions: [] }
   }
-  if (email === BOOTSTRAP_SUPERADMIN_EMAIL) {
+  if (DEFAULT_SUPERADMIN_EMAILS.includes(email as (typeof DEFAULT_SUPERADMIN_EMAILS)[number])) {
     return { signedIn: true, email, isSuperadmin: true, permissions: ALL_PERMISSIONS }
   }
   if (!isMongoConfigured()) {

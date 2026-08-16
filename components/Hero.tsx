@@ -41,20 +41,16 @@ export default function Hero({ entered }: { entered: boolean }) {
 				{SIDE.map((side, i) => {
 					const t = smoothstep(clamp((p - side.start) / 0.22, 0, 1))
 					const item = site.landing.collage.items[i % site.landing.collage.items.length]
+					const media = content.images.collage[i % content.images.collage.length]
+					const image = media?.url || item.image
 					return (
 						<div
-							key={item.image}
+							key={image}
 							className={`absolute ${side.cls} will-change-[opacity,transform]`}
 							style={{ opacity: t, transform: `translateY(${(1 - t) * 64}px)` }}
 						>
 							<div className="relative h-full w-full overflow-hidden rounded-[10px] bg-sage-soft shadow-[0_14px_40px_rgba(0,0,0,.12)]">
-								<Image
-									src={item.image}
-									alt={item.alt}
-									fill
-									sizes="(max-width: 820px) 24vw, 18vw"
-									className="object-cover"
-								/>
+								{media?.type === "video" ? <video src={image} autoPlay muted loop playsInline className="h-full w-full object-cover" /> : <Image src={image} alt={item.alt} fill sizes="(max-width: 820px) 24vw, 18vw" className="object-cover" />}
 							</div>
 						</div>
 					)
@@ -70,14 +66,7 @@ export default function Hero({ entered }: { entered: boolean }) {
 						boxShadow: s > 0.05 ? "0 24px 70px rgba(0,0,0,.18)" : "none",
 					}}
 				>
-					<Image
-						src={site.landing.hero.image}
-						alt={site.landing.hero.imageAlt}
-						fill
-						priority
-						sizes="100vw"
-						className="object-cover"
-					/>
+					{content.images.hero.type === "video" ? <video src={content.images.hero.url} autoPlay muted loop playsInline className="h-full w-full object-cover" /> : <Image src={content.images.hero.url || site.landing.hero.image} alt={site.landing.hero.imageAlt} fill priority sizes="100vw" className="object-cover" />}
 					{/* Names overlaid on the full-frame photo; fade out as it shrinks. */}
 					<div
 						className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 px-6 pb-24 pt-20 text-center text-white"

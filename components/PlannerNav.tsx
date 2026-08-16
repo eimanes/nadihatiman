@@ -160,7 +160,6 @@ export default function PlannerNav() {
                 ))}
                 {isSuperadmin && (
                   <>
-                    <Link href="/home#edit-home" onClick={() => setMenuOpen(false)} className="block rounded-xl px-4 py-2.5 text-[13px] text-ink transition-colors hover:bg-sage-soft">Edit home</Link>
                     <Link
                       href="/accounts"
                       onClick={() => setMenuOpen(false)}
