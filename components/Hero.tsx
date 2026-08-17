@@ -66,7 +66,13 @@ export default function Hero({ entered }: { entered: boolean }) {
 						boxShadow: s > 0.05 ? "0 24px 70px rgba(0,0,0,.18)" : "none",
 					}}
 				>
-					{content.images.hero.type === "video" ? <video src={content.images.hero.url} autoPlay muted loop playsInline className="h-full w-full object-cover" /> : <Image src={content.images.hero.url || site.landing.hero.image} alt={site.landing.hero.imageAlt} fill priority sizes="100vw" className="object-cover" />}
+					{content.images.hero.type === "video" ? (
+						<video src={content.images.hero.url} autoPlay muted loop playsInline className="h-full w-full object-cover" />
+					) : content.images.hero.url ? (
+						<Image src={content.images.hero.url} alt={site.landing.hero.imageAlt} fill priority sizes="100vw" className="object-cover" />
+					) : (
+						<div className="h-full w-full bg-sage-soft" />
+					)}
 					{/* Names overlaid on the full-frame photo; fade out as it shrinks. */}
 					<div
 						className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 px-6 pb-24 pt-20 text-center text-white"

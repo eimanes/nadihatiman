@@ -49,17 +49,17 @@ export const defaultHomeContent: HomeContent = {
     ],
   },
   images: {
-    hero: { url: "/images/hero.jpg", type: "image" },
+    hero: { url: "", type: "image" },
     story: [
-      { url: "/images/chapter-1.jpg", type: "image" },
-      { url: "/images/chapter-2.jpg", type: "image" },
-      { url: "/images/chapter-3.jpg", type: "image" },
+      { url: "", type: "image" },
+      { url: "", type: "image" },
+      { url: "", type: "image" },
     ],
     collage: [
-      { url: "/images/gallery-1.jpg", type: "image" },
-      { url: "/images/gallery-3.jpg", type: "image" },
-      { url: "/images/gallery-4.jpg", type: "image" },
-      { url: "/images/gallery-9.jpg", type: "image" },
+      { url: "", type: "image" },
+      { url: "", type: "image" },
+      { url: "", type: "image" },
+      { url: "", type: "image" },
     ],
   },
 }
