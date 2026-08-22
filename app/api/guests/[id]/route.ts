@@ -34,6 +34,14 @@ export async function PATCH(
 		}
 		if (EVENTS.includes(body.event)) updates.event = body.event
 		if (SIDES.includes(body.side)) updates.side = body.side
+		if (body.invitedBy !== undefined) {
+			updates.invitedBy =
+				typeof body.invitedBy === "string" ? body.invitedBy.trim() : ""
+		}
+		if (body.category !== undefined) {
+			updates.category =
+				typeof body.category === "string" ? body.category.trim() : ""
+		}
 		if (body.pax !== undefined) {
 			updates.pax = Math.max(1, Math.round(Number(body.pax) || 1))
 		}

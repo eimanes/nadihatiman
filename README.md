@@ -97,13 +97,23 @@ app/
   page.tsx                 Dashboard (countdown + event cards + quick links)
   tentative/page.tsx       Swim lane tentative for all 3 events (from DB)
   invitations/page.tsx     Invitation iframes (from DB)
-  guestlist/page.tsx       Canva auto-refresh embeds (from DB)
+  guestlist/page.tsx       Guest list table + Canva auto-refresh embeds
+                           (guests can be tagged with who invited them AND
+                           a customizable category — both managed on the
+                           page; responsive card layout on mobile)
   checklist/page.tsx       MongoDB checklist UI
   budget/page.tsx          MongoDB budget tracker UI
   admin/page.tsx           Edit page for ALL planner content
   api/settings/            GET (load) + PUT (save all planner content)
   api/checklist/           GET/POST + PATCH/DELETE by id
-  api/guests/              GET/POST + PATCH/DELETE by id (MongoDB guest list)
+  api/guests/              GET/POST (single + bulk import) + PATCH/DELETE by id
+                           (fields: name, event, side, pax, phone, note,
+                           status, invitedBy, category)
+  api/guest-inviters/      GET/POST + PATCH/DELETE by id — manages the
+                           "invited by" options (renames cascade to guests,
+                           deletes unassign them)
+  api/guest-categories/    GET/POST + PATCH/DELETE by id — manages the
+                           guest categories, same cascade/unassign behaviour
   api/budget/              GET — fetches & parses your Google Sheet as CSV
 components/
   PlannerNav.tsx           Shrinking pill navigation

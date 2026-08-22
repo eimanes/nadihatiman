@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 		const body = await req.json()
 
 		// Bulk import support (e.g. guest data exported from Canva as CSV):
-		// { guests: [{ name, event, side, pax, phone, note, status }, ...] }
+		// { guests: [{ name, event, side, pax, phone, note, status, invitedBy, category }, ...] }
 		if (Array.isArray(body.guests)) {
 			const now = new Date().toISOString()
 			const docs = body.guests
@@ -61,6 +61,8 @@ export async function POST(req: Request) {
 					status: STATUSES.includes(g.status as string)
 						? g.status
 						: "dijemput",
+					invitedBy: typeof g.invitedBy === "string" ? g.invitedBy.trim() : "",
+					category: typeof g.category === "string" ? g.category.trim() : "",
 					createdAt: now,
 				}))
 				.filter((g: { name: string }) => g.name)
@@ -94,6 +96,10 @@ export async function POST(req: Request) {
 			phone: typeof body.phone === "string" ? body.phone.trim() : "",
 			note: typeof body.note === "string" ? body.note.trim() : "",
 			status: STATUSES.includes(body.status) ? body.status : "dijemput",
+			invitedBy:
+				typeof body.invitedBy === "string" ? body.invitedBy.trim() : "",
+			category:
+				typeof body.category === "string" ? body.category.trim() : "",
 			createdAt: new Date().toISOString(),
 		}
 		const db = await getDb()

@@ -9,6 +9,10 @@ type Organizer = {
   name: string
 }
 
+type OrganizationDraft = Organizer & {
+  customRole?: string
+}
+
 type PrepSection = {
   _id: string
   title: string
@@ -27,6 +31,7 @@ const EVENT_OPTIONS = [
 ]
 
 const ROLE_OPTIONS = ["Floor manager", "Bride assistant", "Groom assistant"]
+const OTHER_ROLE = "Other"
 
 const DEFAULT_ORGANIZATION: Organizer[] = [
   { role: "Floor manager", name: "—" },
@@ -83,7 +88,7 @@ export default function PreparationPage() {
   const [title, setTitle] = useState("")
   const [event, setEvent] = useState("sanding")
   const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const [orgDrafts, setOrgDrafts] = useState<Record<string, Organizer>>({})
+  const [orgDrafts, setOrgDrafts] = useState<Record<string, OrganizationDraft>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -215,12 +220,13 @@ export default function PreparationPage() {
 
   const addOrganization = (section: PrepSection) => {
     const draft = orgDrafts[section._id]
-    if (!draft || !draft.role.trim() || !draft.name.trim()) return
-    const next = [...(section.organization ?? []), { role: draft.role.trim(), name: draft.name.trim() }]
+    const role = draft?.role === OTHER_ROLE ? draft.customRole : draft?.role
+    if (!role?.trim() || !draft?.name.trim()) return
+    const next = [...(section.organization ?? []), { role: role.trim(), name: draft.name.trim() }]
     patchSection(section._id, { organization: next })
     setOrgDrafts((d) => ({
       ...d,
-      [section._id]: { role: "Floor manager", name: "" },
+      [section._id]: { role: "Floor manager", name: "", customRole: "" },
     }))
   }
 
@@ -245,6 +251,8 @@ export default function PreparationPage() {
     patchSection(section._id, {
       organization: section.organization.filter((_, i) => i !== idx),
     })
+
+  const isStandardRole = (role: string) => ROLE_OPTIONS.includes(role)
 
   const filtered = useMemo(
     () =>
@@ -440,13 +448,13 @@ export default function PreparationPage() {
                         {editMode ? (
                           <>
                             <select
-                              value={organizer.role}
+                              value={isStandardRole(organizer.role) ? organizer.role : OTHER_ROLE}
                               onChange={(e) =>
                                 updateOrganization(
                                   section,
                                   idx,
                                   "role",
-                                  e.target.value,
+                                  e.target.value === OTHER_ROLE ? "" : e.target.value,
                                 )
                               }
                               onBlur={() => commitOrganization(section)}
@@ -457,7 +465,19 @@ export default function PreparationPage() {
                                   {role}
                                 </option>
                               ))}
+                              <option value={OTHER_ROLE}>{OTHER_ROLE}</option>
                             </select>
+                            {!isStandardRole(organizer.role) && (
+                              <input
+                                value={organizer.role}
+                                onChange={(e) =>
+                                  updateOrganization(section, idx, "role", e.target.value)
+                                }
+                                onBlur={() => commitOrganization(section)}
+                                placeholder="Role"
+                                className="w-[140px] rounded-full border border-line bg-cream px-2.5 py-1.5 text-[12px] outline-none focus:border-sage"
+                              />
+                            )}
                             <input
                               value={organizer.name}
                               onChange={(e) =>
@@ -506,6 +526,7 @@ export default function PreparationPage() {
                           [section._id]: {
                             role: e.target.value,
                             name: d[section._id]?.name ?? "",
+                            customRole: d[section._id]?.customRole ?? "",
                           },
                         }))
                       }
@@ -516,7 +537,25 @@ export default function PreparationPage() {
                           {role}
                         </option>
                       ))}
+                      <option value={OTHER_ROLE}>{OTHER_ROLE}</option>
                     </select>
+                    {orgDrafts[section._id]?.role === OTHER_ROLE && (
+                      <input
+                        value={orgDrafts[section._id]?.customRole ?? ""}
+                        onChange={(e) =>
+                          setOrgDrafts((d) => ({
+                            ...d,
+                            [section._id]: {
+                              role: OTHER_ROLE,
+                              name: d[section._id]?.name ?? "",
+                              customRole: e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder="Custom role"
+                        className="w-[140px] rounded-full border border-line bg-white px-3 py-1.5 text-[12px] outline-none focus:border-sage"
+                      />
+                    )}
                     <input
                       value={orgDrafts[section._id]?.name ?? ""}
                       onChange={(e) =>
@@ -525,6 +564,7 @@ export default function PreparationPage() {
                           [section._id]: {
                             role: d[section._id]?.role ?? "Floor manager",
                             name: e.target.value,
+                            customRole: d[section._id]?.customRole ?? "",
                           },
                         }))
                       }

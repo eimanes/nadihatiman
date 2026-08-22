@@ -1,0 +1,774 @@
+{
+	"info": {
+		"name": "NADIhatIMAN Wedding Planner",
+		"description": "API collection for the NADIhatIMAN wedding planner app (Next.js + MongoDB + Clerk).\n\n## Authentication\nThe app uses Clerk. The API routes under `/api/*` read the Clerk session cookie, so in Postman you must send the same cookies a signed-in browser sends. Easiest way: sign in at {{baseUrl}}/sign-in, copy the `Cookie` request header value from your browser's DevTools (Network tab → any /api request), and paste it into the `authCookie` collection variable.\n\nPermissions:\n- `edit_guests` — guests + guest-inviters write endpoints\n- `edit_checklist` — checklist write endpoints\n- `edit_schedule` — settings, home-content, home-images\n- `edit_budget` — budget/settings sheet URL\n- superadmin — accounts + preparation\n\n## Guests\nGuest fields: `name`, `event` (nikah|sanding|tandang), `side` (bride|groom), `pax`, `phone`, `note`, `status` (dijemput|disahkan|tidak_hadir), `invitedBy` (free-text label of who invited them, e.g. \"Abah's invitation\"), `category` (free-text label of the guest's category, e.g. \"Family\", \"Friends\", \"VIP\").\n\n## Guest option lists (inviters & categories)\nThe managed lists of \"invited by\" and \"category\" options. Guests store the option's *name*, so for both:\n- PATCH (rename) cascades the new name to every guest using it.\n- DELETE unassigns guests that referenced it (field → \"\") but does NOT delete the guests.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000"
+		},
+		{
+			"key": "authCookie",
+			"value": "__client_uat=1; __session=YOUR_CLERK_SESSION_COOKIE",
+			"description": "Copy the full Cookie header from a signed-in browser request. Required for all write endpoints."
+		},
+		{
+			"key": "guestId",
+			"value": "REPLACE_WITH_GUEST_ID"
+		},
+		{
+			"key": "inviterId",
+			"value": "REPLACE_WITH_INVITER_ID"
+		},
+		{
+			"key": "categoryId",
+			"value": "REPLACE_WITH_CATEGORY_ID"
+		},
+		{
+			"key": "checklistId",
+			"value": "REPLACE_WITH_CHECKLIST_ID"
+		},
+		{
+			"key": "accountId",
+			"value": "REPLACE_WITH_ACCOUNT_ID"
+		},
+		{
+			"key": "preparationId",
+			"value": "REPLACE_WITH_PREPARATION_ID"
+		}
+	],
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "value",
+				"value": "{{authCookie}}",
+				"type": "string"
+			},
+			{
+				"key": "key",
+				"value": "Cookie",
+				"type": "string"
+			},
+			{
+				"key": "in",
+				"value": "header",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Me",
+			"item": [
+				{
+					"name": "Get my permissions",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/me",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "me"]
+						},
+						"description": "Returns { signedIn, email, isSuperadmin, permissions } for the current Clerk session."
+					}
+				}
+			]
+		},
+		{
+			"name": "Guests",
+			"item": [
+				{
+					"name": "List guests",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/guests",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guests"]
+						},
+						"description": "Returns { guests: [...] } sorted by createdAt. No permission needed."
+					}
+				},
+				{
+					"name": "Add guest",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Keluarga Hj. Ahmad\",\n  \"event\": \"sanding\",\n  \"side\": \"groom\",\n  \"invitedBy\": \"Abah's invitation\",\n  \"category\": \"Family\",\n  \"pax\": 4,\n  \"phone\": \"0123456789\",\n  \"note\": \"\",\n  \"status\": \"dijemput\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/guests",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guests"]
+						},
+						"description": "Requires edit_guests. `invitedBy` and `category` are optional (\"\" = unassigned). Returns 201 { guest }."
+					}
+				},
+				{
+					"name": "Bulk import guests (Canva CSV rows)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"guests\": [\n    {\n      \"name\": \"Keluarga Hj. Ahmad\",\n      \"event\": \"sanding\",\n      \"side\": \"groom\",\n      \"invitedBy\": \"Abah's invitation\",\n      \"category\": \"Family\",\n      \"pax\": 4,\n      \"phone\": \"0123456789\",\n      \"note\": \"\",\n      \"status\": \"dijemput\"\n    },\n    {\n      \"name\": \"Puan Aminah\",\n      \"event\": \"nikah\",\n      \"side\": \"bride\",\n      \"invitedBy\": \"Mama's invitation\",\n      \"category\": \"Friends\",\n      \"pax\": 2,\n      \"phone\": \"\",\n      \"note\": \"\",\n      \"status\": \"disahkan\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/guests",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guests"]
+						},
+						"description": "Requires edit_guests. Send { guests: [...] } to insert many at once (used by the Canva CSV import). Returns 201 { guests, inserted }."
+					}
+				},
+				{
+					"name": "Update guest",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"invitedBy\": \"Mama's invitation\",\n  \"category\": \"VIP\",\n  \"status\": \"disahkan\",\n  \"pax\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/guests/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guests", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{guestId}}"
+								}
+							]
+						},
+						"description": "Requires edit_guests. Any subset of fields can be sent: name, event, side, invitedBy, category, pax, phone, note, status. Send invitedBy/category: \"\" to unassign. Returns { ok: true }."
+					}
+				},
+				{
+					"name": "Delete guest",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/guests/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guests", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{guestId}}"
+								}
+							]
+						},
+						"description": "Requires edit_guests. Returns { ok: true }."
+					}
+				}
+			]
+		},
+		{
+			"name": "Guest Inviters",
+			"item": [
+				{
+					"name": "List inviters",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/guest-inviters",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guest-inviters"]
+						},
+						"description": "Returns { inviters: [{ _id, name, createdAt }] } sorted by createdAt. No permission needed."
+					}
+				},
+				{
+					"name": "Add inviter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Abah's invitation\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/guest-inviters",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guest-inviters"]
+						},
+						"description": "Requires edit_guests. Returns 201 { inviter } or 409 if the name already exists (case-insensitive)."
+					}
+				},
+				{
+					"name": "Rename inviter (cascades to guests)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Ayah's invitation\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/guest-inviters/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guest-inviters", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{inviterId}}"
+								}
+							]
+						},
+						"description": "Requires edit_guests. Renames the inviter AND updates every guest whose invitedBy matched the old name. Returns { ok: true, renamed: <count> }."
+					}
+				},
+				{
+					"name": "Delete inviter (unassigns guests)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/guest-inviters/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guest-inviters", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{inviterId}}"
+								}
+							]
+						},
+						"description": "Requires edit_guests. Deletes the inviter and sets invitedBy to \"\" on every guest that referenced it (guests are NOT deleted). Returns { ok: true }."
+					}
+				}
+			]
+		},
+		{
+			"name": "Guest Categories",
+			"item": [
+				{
+					"name": "List categories",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/guest-categories",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guest-categories"]
+						},
+						"description": "Returns { categories: [{ _id, name, createdAt }] } sorted by createdAt. No permission needed."
+					}
+				},
+				{
+					"name": "Add category",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Family\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/guest-categories",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guest-categories"]
+						},
+						"description": "Requires edit_guests. Returns 201 { category } or 409 if the name already exists (case-insensitive)."
+					}
+				},
+				{
+					"name": "Rename category (cascades to guests)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Close family\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/guest-categories/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guest-categories", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{categoryId}}"
+								}
+							]
+						},
+						"description": "Requires edit_guests. Renames the category AND updates every guest whose category matched the old name. Returns { ok: true, renamed: <count> }."
+					}
+				},
+				{
+					"name": "Delete category (unassigns guests)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/guest-categories/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "guest-categories", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{categoryId}}"
+								}
+							]
+						},
+						"description": "Requires edit_guests. Deletes the category and sets category to \"\" on every guest that referenced it (guests are NOT deleted). Returns { ok: true }."
+					}
+				}
+			]
+		},
+		{
+			"name": "Checklist",
+			"item": [
+				{
+					"name": "List checklist",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/checklist",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "checklist"]
+						},
+						"description": "Returns { items: [{ _id, task, event, category, done, createdAt }] }."
+					}
+				},
+				{
+					"name": "Add checklist item",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"task\": \"Confirm catering\",\n  \"event\": \"sanding\",\n  \"category\": \"Vendor\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/checklist",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "checklist"]
+						},
+						"description": "Requires edit_checklist. Returns 201 { item }. Also accepts { items: [...] } for bulk seed."
+					}
+				},
+				{
+					"name": "Update checklist item",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"done\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/checklist/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "checklist", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{checklistId}}"
+								}
+							]
+						},
+						"description": "Requires edit_checklist. Accepts done, task, event, category."
+					}
+				},
+				{
+					"name": "Delete checklist item",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/checklist/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "checklist", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{checklistId}}"
+								}
+							]
+						},
+						"description": "Requires edit_checklist."
+					}
+				}
+			]
+		},
+		{
+			"name": "Budget",
+			"item": [
+				{
+					"name": "Get budget (Google Sheet)",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/budget",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "budget"]
+						},
+						"description": "Fetches and parses the read-only Google Spreadsheet configured in /admin (Bajet tab)."
+					}
+				}
+			]
+		},
+		{
+			"name": "Settings",
+			"item": [
+				{
+					"name": "Load settings",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/settings",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "settings"]
+						},
+						"description": "Returns { settings: { events, invitations, guestlists, budgetSheetUrl }, persisted, configured }."
+					}
+				},
+				{
+					"name": "Save settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"events\": [],\n  \"invitations\": [],\n  \"guestlists\": [],\n  \"budgetSheetUrl\": \"https://docs.google.com/spreadsheets/d/…\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/settings",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "settings"]
+						},
+						"description": "Requires edit_schedule (events/invitations/guestlists) and/or edit_budget (budgetSheetUrl). Load first, edit, then PUT the whole object back."
+					}
+				}
+			]
+		},
+		{
+			"name": "Home",
+			"item": [
+				{
+					"name": "Get home content",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/home-content",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "home-content"]
+						},
+						"description": "Returns { content } for the landing page."
+					}
+				},
+				{
+					"name": "Save home content",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": {}\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/home-content",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "home-content"]
+						},
+						"description": "Requires edit_schedule. GET first and PUT the full content object back (validated by isHomeContent)."
+					}
+				},
+				{
+					"name": "Upload home media",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/home-images",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "home-images"]
+						},
+						"description": "Requires edit_schedule + Cloudinary configured. Multipart form with `file` (image ≤10MB or video ≤50MB), or `localPath` (/images/...) to migrate a bundled asset. Returns { media: { url, publicId, type } }."
+					}
+				}
+			]
+		},
+		{
+			"name": "Preparation",
+			"item": [
+				{
+					"name": "List preparation sections",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/preparation",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "preparation"]
+						},
+						"description": "Returns { sections: [...] } sorted by order."
+					}
+				},
+				{
+					"name": "Add preparation section",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Dulang P (bride's side)\",\n  \"event\": \"sanding\",\n  \"items\": [\"Sirih junjung\", \"Hantaran\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/preparation",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "preparation"]
+						},
+						"description": "Requires superadmin. Also accepts { sections: [...] } for bulk seed."
+					}
+				},
+				{
+					"name": "Update preparation section",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Updated title\",\n  \"items\": [\"Updated item\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/preparation/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "preparation", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{preparationId}}"
+								}
+							]
+						},
+						"description": "Requires superadmin."
+					}
+				},
+				{
+					"name": "Delete preparation section",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/preparation/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "preparation", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{preparationId}}"
+								}
+							]
+						},
+						"description": "Requires superadmin."
+					}
+				}
+			]
+		},
+		{
+			"name": "Accounts (superadmin)",
+			"item": [
+				{
+					"name": "List accounts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "accounts"]
+						},
+						"description": "Requires superadmin. Returns { accounts, permissions, defaultSuperadmins }."
+					}
+				},
+				{
+					"name": "Upsert account",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"helper@example.com\",\n  \"permissions\": [\"edit_guests\"],\n  \"role\": \"account\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "accounts"]
+						},
+						"description": "Requires superadmin. Upserts by email. role: account|superadmin. permissions ⊆ [edit_schedule, edit_checklist, edit_guests, view_budget, edit_budget]."
+					}
+				},
+				{
+					"name": "Update account",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"permissions\": [\"edit_guests\", \"edit_checklist\"],\n  \"role\": \"account\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "accounts", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{accountId}}"
+								}
+							]
+						},
+						"description": "Requires superadmin. Default superadmins cannot be demoted or removed; the last superadmin cannot be removed."
+					}
+				},
+				{
+					"name": "Delete account",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "accounts", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{accountId}}"
+								}
+							]
+						},
+						"description": "Requires superadmin."
+					}
+				}
+			]
+		}
+	]
+}
