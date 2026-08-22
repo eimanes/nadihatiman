@@ -8,6 +8,17 @@ import { site } from "@/content/site"
 export const metadata: Metadata = {
   title: `${site.brand.name} — Wedding Planner`,
   description: `${site.brand.name}: ${site.couple.bride} & ${site.couple.groom}'s wedding planner — event schedule, digital invitations, guest list, checklist and budget.`,
+  openGraph: {
+    title: `${site.brand.name} — Wedding Planner`,
+    description: `${site.couple.bride} & ${site.couple.groom}'s wedding planner`,
+    images: ['/N_E.png'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${site.brand.name} — Wedding Planner`,
+    description: `${site.couple.bride} & ${site.couple.groom}'s wedding planner`,
+    images: ['/app/N_E.png'],
+  },
 }
 
 export default function RootLayout({

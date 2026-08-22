@@ -66,12 +66,19 @@ export default function Hero({ entered }: { entered: boolean }) {
 						boxShadow: s > 0.05 ? "0 24px 70px rgba(0,0,0,.18)" : "none",
 					}}
 				>
+				{/* Show the local fallback until the Cloudinary hero resolves,
+				    so the first paint is never an empty placeholder. */}
 					{content.images.hero.type === "video" ? (
 						<video src={content.images.hero.url} autoPlay muted loop playsInline className="h-full w-full object-cover" />
-					) : content.images.hero.url ? (
-						<Image src={content.images.hero.url} alt={site.landing.hero.imageAlt} fill priority sizes="100vw" className="object-cover" />
 					) : (
-						<div className="h-full w-full bg-sage-soft" />
+						<Image
+							src={content.images.hero.url || site.landing.hero.image}
+							alt={site.landing.hero.imageAlt}
+							fill
+							priority
+							sizes="100vw"
+							className="object-cover"
+						/>
 					)}
 					{/* Names overlaid on the full-frame photo; fade out as it shrinks. */}
 					<div

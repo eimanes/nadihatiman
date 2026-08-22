@@ -98,9 +98,12 @@ app/
   tentative/page.tsx       Swim lane tentative for all 3 events (from DB)
   invitations/page.tsx     Invitation iframes (from DB)
   guestlist/page.tsx       Guest list table + Canva auto-refresh embeds
-                           (guests can be tagged with who invited them AND
-                           a customizable category — both managed on the
-                           page; responsive card layout on mobile)
+                           (guests belong to an invitation — e.g. Eiman,
+                           Abah — and each invitation owns its categories,
+                           e.g. Eiman → BSN; both managed on the page;
+                           search + sort by name/invitation/category +
+                           pagination 10/20/50/100/all; responsive card
+                           layout on mobile)
   checklist/page.tsx       MongoDB checklist UI
   budget/page.tsx          MongoDB budget tracker UI
   admin/page.tsx           Edit page for ALL planner content
@@ -110,10 +113,12 @@ app/
                            (fields: name, event, side, pax, phone, note,
                            status, invitedBy, category)
   api/guest-inviters/      GET/POST + PATCH/DELETE by id — manages the
-                           "invited by" options (renames cascade to guests,
-                           deletes unassign them)
-  api/guest-categories/    GET/POST + PATCH/DELETE by id — manages the
-                           guest categories, same cascade/unassign behaviour
+                           "invited by" options (renames cascade to guests
+                           and owned categories; deletes unassign guests
+                           and remove the owned categories)
+  api/guest-categories/    GET (?owner=<invitation> to filter) /POST
+                           (name + owner) + PATCH/DELETE by id — categories
+                           are owned by an invitation
   api/budget/              GET — fetches & parses your Google Sheet as CSV
 components/
   PlannerNav.tsx           Shrinking pill navigation
@@ -122,9 +127,11 @@ components/
   Countdown.tsx            Live countdown (no RSVP)
   Reveal.tsx               IntersectionObserver reveal wrapper
   SmoothScroll.tsx         Lenis inertia scrolling
+  HomeContentProvider.tsx  Home content + localStorage cache (instant paint)
 content/
   site.ts                  DEFAULT planner content (seed / fallback)
 lib/
   mongodb.ts               MongoDB connection helper
   settings.ts              Loads planner content from DB with fallback
+  media-cache.ts           Client cache: localStorage content + media warmup
 ```

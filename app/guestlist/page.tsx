@@ -24,6 +24,8 @@ type Guest = {
 type GuestOption = {
 	_id: string
 	name: string
+	/** Categories only: the invitation (inviter) that owns this category. */
+	owner?: string
 	createdAt: string
 }
 
@@ -179,6 +181,13 @@ export default function GuestlistPage() {
 	const [filterInvitedBy, setFilterInvitedBy] = useState<string>("semua")
 	const [filterCategory, setFilterCategory] = useState<string>("semua")
 
+	// Search / sort / pagination
+	const [search, setSearch] = useState("")
+	const [sortBy, setSortBy] = useState<"default" | "name" | "invitedBy" | "category">("default")
+	const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+	const [pageSize, setPageSize] = useState<10 | 20 | 50 | 100 | "all">(20)
+	const [page, setPage] = useState(1)
+
 	// Add form
 	const [name, setName] = useState("")
 	const [event, setEvent] = useState<Guest["event"]>("sanding")
@@ -194,7 +203,6 @@ export default function GuestlistPage() {
 	const [editingInviterName, setEditingInviterName] = useState("")
 
 	// Category manager
-	const [newCategory, setNewCategory] = useState("")
 	const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
 	const [editingCategoryName, setEditingCategoryName] = useState("")
 
@@ -253,6 +261,15 @@ export default function GuestlistPage() {
 	const addGuest = async (e: React.FormEvent) => {
 		e.preventDefault()
 		if (!name.trim() || saving) return
+		// A category only makes sense together with the invitation that owns it.
+		if (category && !invitedBy) {
+			setError("Choose an invitation first — categories belong to an invitation.")
+			return
+		}
+		if (category && !categories.some((c) => c.name === category && c.owner === invitedBy)) {
+			setError(`"${category}" is not a category of the "${invitedBy}" invitation.`)
+			return
+		}
 		setSaving(true)
 		try {
 			const res = await fetch("/api/guests", {
@@ -263,13 +280,6 @@ export default function GuestlistPage() {
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Error saving guest.")
 			setGuests((g) => [...g, data.guest])
-			// Register any brand-new option names used in the form.
-			if (invitedBy && !inviters.some((i) => i.name === invitedBy)) {
-				await addInviter(invitedBy)
-			}
-			if (category && !categories.some((c) => c.name === category)) {
-				await addCategory(category)
-			}
 			setName("")
 			setPhone("")
 			setPax(1)
@@ -300,15 +310,15 @@ export default function GuestlistPage() {
 		}
 	}
 
-	/** Add a guest category (e.g. "Family", "Friends", "VIP"). */
-	const addCategory = async (rawName: string) => {
+	/** Add a guest category (e.g. Eiman → BSN, Abah → Family). */
+	const addCategory = async (rawName: string, owner: string) => {
 		const trimmed = rawName.trim()
-		if (!trimmed) return
+		if (!trimmed || !owner) return
 		try {
 			const res = await fetch("/api/guest-categories", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: trimmed }),
+				body: JSON.stringify({ name: trimmed, owner }),
 			})
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Error adding category.")
@@ -353,7 +363,8 @@ export default function GuestlistPage() {
 		}
 	}
 
-	/** Delete an inviter — guests referencing it are unassigned. */
+	/** Delete an inviter — guests referencing it are unassigned, and its
+	    owned categories are removed. */
 	const removeInviter = async (id: string) => {
 		const prev = inviters.find((i) => i._id === id)
 		setInviters((list) => list.filter((i) => i._id !== id))
@@ -366,30 +377,33 @@ export default function GuestlistPage() {
 			if (prev) {
 				setGuests((gs) =>
 					gs.map((g) =>
-						g.invitedBy === prev.name ? { ...g, invitedBy: "" } : g,
+						g.invitedBy === prev.name ? { ...g, invitedBy: "", category: "" } : g,
 					),
 				)
+				// The API deletes categories owned by this inviter — mirror locally.
+				setCategories((list) => list.filter((c) => c.owner !== prev.name))
 			}
 			setError(null)
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Error deleting inviter.")
 			loadInviters()
+			loadCategories()
 			load()
 		}
 	}
 
 	/** Rename a category — cascades to all guests using the old name. */
-	const renameCategory = async (id: string, rawName: string) => {
+	const renameCategory = async (id: string, rawName: string, owner?: string) => {
 		const trimmed = rawName.trim()
 		if (!trimmed) return
 		setCategories((list) =>
-			list.map((c) => (c._id === id ? { ...c, name: trimmed } : c)),
+			list.map((c) => (c._id === id ? { ...c, name: trimmed, owner: owner ?? c.owner } : c)),
 		)
 		try {
 			const res = await fetch(`/api/guest-categories/${id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: trimmed }),
+				body: JSON.stringify(owner !== undefined ? { name: trimmed, owner } : { name: trimmed }),
 			})
 			if (!res.ok) {
 				const data = await res.json()
@@ -438,6 +452,36 @@ export default function GuestlistPage() {
 	}
 
 	const patchGuest = async (id: string, updates: Partial<Guest>) => {
+		// Keep category ↔ invitation consistent: if either changes, validate
+		// that the resulting category belongs to the resulting invitation.
+		const current = guests.find((g) => g._id === id)
+		if (current) {
+			const nextInvitedBy = updates.invitedBy ?? current.invitedBy
+			const nextCategory = updates.category !== undefined ? updates.category : current.category
+			if (nextCategory && nextCategory !== current.category) {
+				if (!nextInvitedBy) {
+					setError("Choose an invitation first — categories belong to an invitation.")
+					return
+				}
+				const valid = categories.some(
+					(c) => c.name === nextCategory && c.owner === nextInvitedBy,
+				)
+				if (!valid) {
+					setError(`"${nextCategory}" is not a category of the "${nextInvitedBy}" invitation.`)
+					return
+				}
+			}
+			// Changing the invitation invalidates a category from another owner.
+			if (
+				updates.invitedBy !== undefined &&
+				updates.invitedBy !== current.invitedBy &&
+				nextCategory &&
+				!categories.some((c) => c.name === nextCategory && c.owner === nextInvitedBy)
+			) {
+				// Clear the stale category along with the invitation change.
+				updates = { ...updates, category: "" }
+			}
+		}
 		setGuests((g) => g.map((x) => (x._id === id ? { ...x, ...updates } : x)))
 		try {
 			const res = await fetch(`/api/guests/${id}`, {
@@ -492,7 +536,7 @@ export default function GuestlistPage() {
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Error importing guests.")
 			setGuests((g) => [...g, ...data.guests])
-			// Register any new "invited by" / category values from the CSV as options.
+			// Register any new "invited by" values from the CSV as options.
 			const knownInviters = new Set(inviters.map((i) => i.name.toLowerCase()))
 			const freshInviters = Array.from(
 				new Set(
@@ -500,13 +544,19 @@ export default function GuestlistPage() {
 				),
 			)
 			for (const n of freshInviters) await addInviter(n)
-			const knownCategories = new Set(categories.map((c) => c.name.toLowerCase()))
-			const freshCategories = Array.from(
+			// Register new category values per their invitation (owner).
+			const knownCats = new Set(categories.map((c) => `${c.owner}\u0000${c.name}`.toLowerCase()))
+			const freshCats = Array.from(
 				new Set(
-					parsed.map((g) => g.category).filter((n) => n && !knownCategories.has(n.toLowerCase())),
+					parsed
+						.filter((g) => g.category && g.invitedBy)
+						.map((g) => `${g.invitedBy}\u0000${g.category}`),
 				),
-			)
-			for (const n of freshCategories) await addCategory(n)
+			).filter((key) => !knownCats.has(key.toLowerCase()))
+			for (const key of freshCats) {
+				const [owner, catName] = key.split("\u0000")
+				await addCategory(catName, owner)
+			}
 			setImportInfo(`Imported ${data.inserted} guests from Canva CSV.`)
 			setError(null)
 		} catch (e) {
@@ -516,17 +566,69 @@ export default function GuestlistPage() {
 		}
 	}
 
-	const filtered = useMemo(
+	const filtered = useMemo(() => {
+		const q = search.trim().toLowerCase()
+		return guests.filter(
+			(g) =>
+				(filterEvent === "semua" || g.event === filterEvent) &&
+				(filterSide === "semua" || g.side === filterSide) &&
+				(filterInvitedBy === "semua" || g.invitedBy === filterInvitedBy) &&
+				(filterCategory === "semua" || g.category === filterCategory) &&
+				(!q ||
+					g.name.toLowerCase().includes(q) ||
+					(g.phone ?? "").toLowerCase().includes(q) ||
+					(g.note ?? "").toLowerCase().includes(q) ||
+					(g.invitedBy ?? "").toLowerCase().includes(q) ||
+					(g.category ?? "").toLowerCase().includes(q)),
+		)
+	}, [guests, filterEvent, filterSide, filterInvitedBy, filterCategory, search])
+
+	// Sorted view — "default" keeps the insertion (createdAt) order.
+	const sorted = useMemo(() => {
+		if (sortBy === "default") return filtered
+		const dir = sortDir === "asc" ? 1 : -1
+		return [...filtered].sort((a, b) => {
+			const av = String(a[sortBy] ?? "").toLowerCase()
+			const bv = String(b[sortBy] ?? "").toLowerCase()
+			// Alphabetical on the chosen column; ties always fall back to name.
+			if (av === bv) return a.name.localeCompare(b.name)
+			return av.localeCompare(bv) * dir
+		})
+	}, [filtered, sortBy, sortDir])
+
+	// Pagination — clamp the current page into the valid range.
+	const totalCount = sorted.length
+	const totalPages = pageSize === "all" ? 1 : Math.max(1, Math.ceil(totalCount / pageSize))
+	const safePage = Math.min(page, totalPages)
+	const paged = useMemo(
 		() =>
-			guests.filter(
-				(g) =>
-					(filterEvent === "semua" || g.event === filterEvent) &&
-					(filterSide === "semua" || g.side === filterSide) &&
-					(filterInvitedBy === "semua" || g.invitedBy === filterInvitedBy) &&
-					(filterCategory === "semua" || g.category === filterCategory),
-			),
-		[guests, filterEvent, filterSide, filterInvitedBy, filterCategory],
+			pageSize === "all"
+				? sorted
+				: sorted.slice((safePage - 1) * pageSize, safePage * pageSize),
+		[sorted, pageSize, safePage],
 	)
+	const rowNumber = useCallback(
+		(i: number) => (pageSize === "all" ? i + 1 : (safePage - 1) * pageSize + i + 1),
+		[pageSize, safePage],
+	)
+
+	// Any filter/search/sort/page-size change sends the user back to page 1.
+	useEffect(() => {
+		setPage(1)
+	}, [search, filterEvent, filterSide, filterInvitedBy, filterCategory, pageSize, sortBy, sortDir])
+
+	// Compact page list with ellipsis, e.g. 1 … 4 5 6 … 12
+	const pageItems = useMemo(() => {
+		const items: Array<number | "…"> = []
+		for (let n = 1; n <= totalPages; n++) {
+			if (n === 1 || n === totalPages || Math.abs(n - safePage) <= 1) {
+				items.push(n)
+		} else if (items[items.length - 1] !== "…") {
+				items.push("…")
+		}
+		}
+		return items
+	}, [totalPages, safePage])
 
 	const totalPax = filtered.reduce((sum, g) => sum + (g.pax || 0), 0)
 	const confirmedPax = filtered
@@ -541,7 +643,20 @@ export default function GuestlistPage() {
 		return Array.from(names).sort((a, b) => a.localeCompare(b))
 	}, [inviters, guests])
 
-	// Category options work the same way.
+	// Category options work the same way, but are OWNED BY an invitation —
+	// "Eiman → BSN" only appears when the Eiman invitation is selected.
+	const categoriesFor = useCallback(
+		(owner: string | undefined) =>
+			owner
+				? categories
+						.filter((c) => c.owner === owner)
+						.map((c) => c.name)
+						.sort((a, b) => a.localeCompare(b))
+				: [],
+		[categories],
+	)
+
+	// All categories (used by the "All categories" filter dropdown).
 	const categoryOptions = useMemo(() => {
 		const names = new Set(categories.map((c) => c.name))
 		for (const g of guests) if (g.category) names.add(g.category)
@@ -557,7 +672,7 @@ export default function GuestlistPage() {
 				<h1 className="font-serif text-4xl text-ink">Our guests</h1>
 				<p className="mx-auto mt-3 max-w-[560px] text-[14px] leading-relaxed text-muted">
 					{canEdit
-						? "The guest list is saved — add, update attendance status, and delete directly from the table below. Track who invited each guest (e.g. Abah's invitation) and their category (e.g. Family, Friends) — both are customizable below."
+						? "The guest list is saved — add, update attendance status, and delete directly from the table below. Guests belong to an invitation (e.g. Eiman, Abah) and each invitation owns its own categories (e.g. Eiman → BSN)."
 						: "The guest list for all our celebrations."}
 				</p>
 			</header>
@@ -600,7 +715,11 @@ export default function GuestlistPage() {
 				<select
 					className={inputCls}
 					value={invitedBy}
-					onChange={(e) => setInvitedBy(e.target.value)}
+					onChange={(e) => {
+						setInvitedBy(e.target.value)
+						// Categories belong to an invitation — reset when it changes.
+						setCategory("")
+					}}
 				>
 					<option value="">Invited by…</option>
 					{invitedByOptions.map((n) => (
@@ -613,9 +732,13 @@ export default function GuestlistPage() {
 					className={inputCls}
 					value={category}
 					onChange={(e) => setCategory(e.target.value)}
+					disabled={!invitedBy}
+					title={!invitedBy ? "Choose an invitation first" : undefined}
 				>
-					<option value="">Category…</option>
-					{categoryOptions.map((n) => (
+					<option value="">
+						{invitedBy ? "Category…" : "Pick invitation first"}
+					</option>
+					{categoriesFor(invitedBy).map((n) => (
 						<option key={n} value={n}>
 							{n}
 						</option>
@@ -647,6 +770,15 @@ export default function GuestlistPage() {
 			{/* Filters + stats */}
 			<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
 				<div className="flex flex-wrap gap-2">
+					{/* Search — matches name, phone, note, invitation, category */}
+					<input
+						className={`${inputCls} min-w-[180px] flex-1 md:flex-none md:w-56`}
+						type="search"
+						placeholder="🔍 Search guests…"
+						value={search}
+						onChange={(e) => setSearch(e.target.value)}
+						aria-label="Search guests"
+					/>
 					<select
 						className={inputCls}
 						value={filterEvent}
@@ -691,9 +823,10 @@ export default function GuestlistPage() {
 						))}
 					</select>
 				</div>
-				<div className="flex flex-wrap gap-2 text-[12px]">
+				<div className="flex flex-wrap items-center gap-2 text-[12px]">
 					<span className="rounded-full border border-line bg-white px-3 py-1.5 text-muted">
-						{filtered.length} guest groups
+						{totalCount} guest group{totalCount === 1 ? "" : "s"}
+						{search && <span className="text-muted/70"> found</span>}
 					</span>
 					<span className="rounded-full border border-line bg-white px-3 py-1.5 text-muted">
 						Total pax: <b className="text-ink">{totalPax}</b>
@@ -701,6 +834,53 @@ export default function GuestlistPage() {
 					<span className="rounded-full border border-sage/30 bg-sage-soft px-3 py-1.5 text-sage">
 						Confirmed: <b>{confirmedPax} pax</b>
 					</span>
+					{/* Sort by name / invited by / category */}
+					<select
+						className={`${inputCls} py-1.5`}
+						value={sortBy}
+						onChange={(e) => {
+							const v = e.target.value as typeof sortBy
+							// Re-selecting the active column flips the direction.
+							if (v === sortBy && v !== "default") {
+								setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+							} else {
+								setSortBy(v)
+								setSortDir("asc")
+							}
+						}}
+						aria-label="Sort by"
+					>
+						<option value="default">Sort: default</option>
+						<option value="name">Sort: name</option>
+						<option value="invitedBy">Sort: invited by</option>
+						<option value="category">Sort: category</option>
+					</select>
+					{sortBy !== "default" && (
+						<button
+							type="button"
+							className="rounded-full border border-line bg-white px-2.5 py-1.5 text-[11px] text-muted transition-colors hover:text-ink"
+							onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+							aria-label={`Sort ${sortDir === "asc" ? "descending" : "ascending"}`}
+							title={sortDir === "asc" ? "Ascending ↑ — click for descending" : "Descending ↓ — click for ascending"}
+						>
+							{sortDir === "asc" ? "↑ A–Z" : "↓ Z–A"}
+						</button>
+					)}
+					{/* Rows per page */}
+					<select
+						className={`${inputCls} py-1.5`}
+						value={String(pageSize)}
+						onChange={(e) =>
+							setPageSize(e.target.value === "all" ? "all" : (Number(e.target.value) as 10 | 20 | 50 | 100))
+						}
+						aria-label="Rows per page"
+					>
+						<option value="10">10 / page</option>
+						<option value="20">20 / page</option>
+						<option value="50">50 / page</option>
+						<option value="100">100 / page</option>
+						<option value="all">Show all</option>
+					</select>
 				</div>
 			</div>
 
@@ -712,17 +892,17 @@ export default function GuestlistPage() {
 						<li className="px-4 py-10 text-center text-[13px] text-muted">
 							Loading guest list…
 						</li>
-					) : filtered.length === 0 ? (
+					) : sorted.length === 0 ? (
 						<li className="px-4 py-10 text-center text-[13px] text-muted">
-							No guests yet — add your first guest above. 🌸
+							{search ? `No guests match “${search}”.` : "No guests yet — add your first guest above. 🌸"}
 						</li>
 					) : (
-						filtered.map((g, i) => (
+						paged.map((g, i) => (
 							<li key={g._id} className="p-4">
 								<div className="flex items-start justify-between gap-3">
 									<div className="min-w-0">
 										<p className="font-serif text-[15px] leading-snug text-ink">
-											<span className="mr-1.5 text-[11px] text-muted">{i + 1}.</span>
+											<span className="mr-1.5 text-[11px] text-muted">{rowNumber(i)}.</span>
 											{g.name}
 										</p>
 										{g.note && (
@@ -783,12 +963,13 @@ export default function GuestlistPage() {
 									<label className="block">
 										<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Category</span>
 										{canEdit ? <select
-											className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
+											className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage disabled:opacity-50"
 											value={g.category ?? ""}
 											onChange={(e) => patchGuest(g._id, { category: e.target.value })}
+											disabled={!g.invitedBy}
 										>
-											<option value="">—</option>
-											{categoryOptions.map((n) => (
+											<option value="">{g.invitedBy ? "—" : "Pick invitation"}</option>
+											{categoriesFor(g.invitedBy).map((n) => (
 												<option key={n} value={n}>{n}</option>
 											))}
 										</select> : <span className="text-[13px] text-muted">{g.category || "—"}</span>}
@@ -851,19 +1032,19 @@ export default function GuestlistPage() {
 										Loading guest list…
 									</td>
 								</tr>
-							) : filtered.length === 0 ? (
+							) : sorted.length === 0 ? (
 								<tr>
 									<td colSpan={10} className="px-4 py-10 text-center text-[13px] text-muted">
-										No guests yet — add your first guest above. 🌸
+										{search ? `No guests match “${search}”.` : "No guests yet — add your first guest above. 🌸"}
 									</td>
 								</tr>
 							) : (
-								filtered.map((g, i) => (
+								paged.map((g, i) => (
 									<tr
 										key={g._id}
 										className="border-b border-line/60 transition-colors last:border-0 hover:bg-cream/60"
 									>
-										<td className="px-4 py-3 text-[12px] text-muted">{i + 1}</td>
+										<td className="px-4 py-3 text-[12px] text-muted">{rowNumber(i)}</td>
 										<td className="px-4 py-3">
 											<span className="font-serif text-[15px] text-ink">{g.name}</span>
 											{g.note && (
@@ -918,14 +1099,16 @@ export default function GuestlistPage() {
 										</td>
 										<td className="px-4 py-3">
 											{canEdit ? <select
-												className="max-w-[130px] rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage"
+												className="max-w-[130px] rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage disabled:opacity-50"
 												value={g.category ?? ""}
 												onChange={(e) =>
 													patchGuest(g._id, { category: e.target.value })
 												}
+												disabled={!g.invitedBy}
+												title={!g.invitedBy ? "Choose an invitation first" : undefined}
 											>
-												<option value="">—</option>
-												{categoryOptions.map((n) => (
+												<option value="">{g.invitedBy ? "—" : "Pick invitation"}</option>
+												{categoriesFor(g.invitedBy).map((n) => (
 													<option key={n} value={n}>
 														{n}
 													</option>
@@ -979,8 +1162,58 @@ export default function GuestlistPage() {
 				</div>
 			</div>
 
-			{/* Invited-by & category managers — add, rename, or remove the
-			    customizable options. */}
+			{/* Pagination */}
+			{pageSize !== "all" && totalPages > 1 && (
+				<nav
+					className="mt-4 flex flex-wrap items-center justify-center gap-1.5"
+					aria-label="Guest list pages"
+				>
+					<button
+						type="button"
+						className="rounded-full border border-line bg-white px-3 py-1.5 text-[12px] text-muted transition-colors hover:text-ink disabled:opacity-40"
+						onClick={() => setPage((p) => Math.max(1, p - 1))}
+						disabled={safePage <= 1}
+					>
+						← Prev
+					</button>
+					{pageItems.map((item, idx) =>
+						item === "…" ? (
+							<span key={`e${idx}`} className="px-1 text-[12px] text-muted">
+								…
+							</span>
+						) : (
+							<button
+								key={item}
+								type="button"
+								className={`min-w-[34px] rounded-full border px-2.5 py-1.5 text-[12px] transition-colors ${
+									item === safePage
+										? "border-sage bg-sage text-white"
+										: "border-line bg-white text-muted hover:text-ink"
+								}`}
+								onClick={() => setPage(item)}
+								aria-current={item === safePage ? "page" : undefined}
+							>
+								{item}
+							</button>
+						),
+					)}
+					<button
+						type="button"
+						className="rounded-full border border-line bg-white px-3 py-1.5 text-[12px] text-muted transition-colors hover:text-ink disabled:opacity-40"
+						onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+						disabled={safePage >= totalPages}
+					>
+						Next →
+					</button>
+					<span className="ml-1 hidden text-[11px] text-muted sm:inline">
+						Page {safePage} of {totalPages}
+					</span>
+				</nav>
+			)}
+
+			{/* Invited-by & category managers. Categories belong to an
+			    invitation (e.g. Eiman → BSN), so they are managed per
+			    invitation. */}
 			{canEdit && <section className="mt-10 grid gap-6 rounded-2xl border border-line bg-white p-5 md:grid-cols-2">
 				{/* Invited-by manager */}
 				<div>
@@ -990,8 +1223,8 @@ export default function GuestlistPage() {
 					<p className="mt-1 text-[12px] leading-relaxed text-muted">
 						The invitations a guest can belong to — not just Eiman's or
 						Nadia's side, but anyone's like "Abah's invitation".
-						Renaming updates every guest that uses it; deleting
-						unassigns those guests (they are not deleted).
+						Renaming updates every guest and its categories; deleting
+						removes its categories too (guests are not deleted).
 					</p>
 
 					<form
@@ -1019,12 +1252,13 @@ export default function GuestlistPage() {
 
 					{inviters.length === 0 ? (
 						<p className="mt-4 text-[12px] text-muted">
-							No invitations yet — add one above.
+							No invitations yet — add one above, then manage its categories on the right.
 						</p>
 					) : (
 						<ul className="mt-4 flex flex-wrap gap-2">
 							{inviters.map((inv) => {
 								const count = guests.filter((g) => g.invitedBy === inv.name).length
+								const catCount = categories.filter((c) => c.owner === inv.name).length
 								const isEditing = editingInviterId === inv._id
 								return (
 									<li
@@ -1072,7 +1306,13 @@ export default function GuestlistPage() {
 												<span className="truncate">
 													{inv.name}
 													{count > 0 && (
-														<span className="ml-1.5 text-muted">({count})</span>
+														<span className="ml-1.5 text-muted">({count}</span>
+													)}
+													{catCount > 0 && (
+														<span className="text-muted"> · {catCount} cat)</span>
+													)}
+													{count > 0 && catCount === 0 && (
+														<span className="text-muted">)</span>
 													)}
 												</span>
 												<button
@@ -1103,124 +1343,139 @@ export default function GuestlistPage() {
 					)}
 				</div>
 
-				{/* Category manager */}
+				{/* Category manager — grouped per invitation */}
 				<div>
 					<h2 className="font-serif text-lg text-ink">
-						🏷️ Categories — manage guest categories
+						🏷️ Categories — owned by invitations
 					</h2>
 					<p className="mt-1 text-[12px] leading-relaxed text-muted">
-						Group guests however you like — e.g. Family, Friends,
-						Colleagues, VIP. Renaming a category updates every guest
-						that uses it; deleting one unassigns those guests
-						(they are not deleted).
+						Categories belong to an invitation. Add them under the
+						right invitation (e.g. <b>Eiman → BSN</b>) — the guest form
+						then only offers that invitation's categories.
 					</p>
 
-					<form
-						className="mt-4 flex gap-2"
-						onSubmit={(e) => {
-							e.preventDefault()
-							addCategory(newCategory)
-							setNewCategory("")
-						}}
-					>
-						<input
-							className={`${inputCls} min-w-0 flex-1`}
-							placeholder="e.g. Family, Friends, VIP…"
-							value={newCategory}
-							onChange={(e) => setNewCategory(e.target.value)}
-						/>
-						<button
-							type="submit"
-							disabled={!newCategory.trim()}
-							className="shrink-0 rounded-lg bg-sage px-4 py-2 text-[12px] uppercase tracking-[0.14em] text-white transition-opacity disabled:opacity-50"
-						>
-							+ Add
-						</button>
-					</form>
-
-					{categories.length === 0 ? (
+					{inviters.length === 0 ? (
 						<p className="mt-4 text-[12px] text-muted">
-							No categories yet — add one above.
+							Add an invitation first (left) — then its categories appear here.
 						</p>
 					) : (
-						<ul className="mt-4 flex flex-wrap gap-2">
-							{categories.map((cat) => {
-								const count = guests.filter((g) => g.category === cat.name).length
-								const isEditing = editingCategoryId === cat._id
+						<div className="mt-4 space-y-4">
+							{inviters.map((inv) => {
+								const owned = categories.filter((c) => c.owner === inv.name)
 								return (
-									<li
-										key={cat._id}
-										className="flex max-w-full items-center gap-2 rounded-full border border-line bg-cream px-3 py-1.5 text-[12px] text-ink"
-									>
-										{isEditing ? (
-											<>
-												<input
-													autoFocus
-													className="w-36 min-w-0 rounded-md border border-line bg-white px-2 py-1 text-[12px] text-ink outline-none focus:border-sage"
-													value={editingCategoryName}
-													onChange={(e) => setEditingCategoryName(e.target.value)}
-													onKeyDown={(e) => {
-														if (e.key === "Enter") {
-															e.preventDefault()
-															renameCategory(cat._id, editingCategoryName)
-															setEditingCategoryId(null)
-														}
-														if (e.key === "Escape") setEditingCategoryId(null)
-													}}
-												/>
-												<button
-													type="button"
-													className="rounded-full px-1.5 text-sage"
-													aria-label="Save category name"
-													onClick={() => {
-														renameCategory(cat._id, editingCategoryName)
-														setEditingCategoryId(null)
-													}}
-												>
-													✓
-												</button>
-												<button
-													type="button"
-													className="rounded-full px-1.5 text-muted"
-													aria-label="Cancel editing"
-													onClick={() => setEditingCategoryId(null)}
-												>
-													✕
-												</button>
-											</>
+									<div key={inv._id} className="rounded-xl border border-line bg-cream/40 p-3">
+										<p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+											{inv.name}
+										</p>
+										<form
+											className="mt-2 flex gap-2"
+											onSubmit={(e) => {
+												e.preventDefault()
+												const input = e.currentTarget.elements.namedItem("cat") as HTMLInputElement
+												addCategory(input.value, inv.name)
+												input.value = ""
+											}}
+										>
+											<input
+												name="cat"
+												className="min-w-0 flex-1 rounded-lg border border-line bg-white px-3 py-1.5 text-[12px] text-ink outline-none focus:border-sage"
+												placeholder="New category, e.g. BSN…"
+											/>
+											<button
+												type="submit"
+												className="shrink-0 rounded-lg bg-sage px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-white transition-opacity hover:opacity-90"
+											>
+												+ Add
+											</button>
+										</form>
+										{owned.length === 0 ? (
+											<p className="mt-2 text-[11px] text-muted">No categories yet.</p>
 										) : (
-											<>
-												<span className="truncate">
-													{cat.name}
-													{count > 0 && (
-														<span className="ml-1.5 text-muted">({count})</span>
-													)}
-												</span>
-												<button
-													type="button"
-													className="shrink-0 rounded-full px-1.5 text-muted transition-colors hover:text-sage"
-													aria-label={`Rename ${cat.name}`}
-													onClick={() => {
-														setEditingCategoryId(cat._id)
-														setEditingCategoryName(cat.name)
-													}}
-												>
-													✎
-												</button>
-												<button
-													type="button"
-													className="shrink-0 rounded-full px-1.5 text-muted transition-colors hover:text-[#A0524B]"
-													aria-label={`Delete ${cat.name}`}
-													onClick={() => removeCategory(cat._id)}
-												>
-													✕
-												</button>
-											</>
+											<ul className="mt-2 flex flex-wrap gap-2">
+												{owned.map((cat) => {
+													const count = guests.filter(
+														(g) => g.category === cat.name && g.invitedBy === inv.name,
+													).length
+													const isEditing = editingCategoryId === cat._id
+													return (
+														<li
+															key={cat._id}
+															className="flex max-w-full items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-[12px] text-ink"
+														>
+															{isEditing ? (
+																<>
+																	<input
+																		autoFocus
+																		className="w-28 min-w-0 rounded-md border border-line bg-white px-2 py-1 text-[12px] text-ink outline-none focus:border-sage"
+																		value={editingCategoryName}
+																		onChange={(e) => setEditingCategoryName(e.target.value)}
+																		onKeyDown={(e) => {
+																			if (e.key === "Enter") {
+																				e.preventDefault()
+																				renameCategory(cat._id, editingCategoryName)
+																				setEditingCategoryId(null)
+																			}
+																			if (e.key === "Escape") setEditingCategoryId(null)
+																		}}
+																	/>
+																	<button
+																		type="button"
+																		className="rounded-full px-1.5 text-sage"
+																		aria-label="Save category name"
+																		onClick={() => {
+																			renameCategory(cat._id, editingCategoryName)
+																			setEditingCategoryId(null)
+																		}}
+																	>
+																		✓
+																	</button>
+																	<button
+																		type="button"
+																		className="rounded-full px-1.5 text-muted"
+																		aria-label="Cancel editing"
+																		onClick={() => setEditingCategoryId(null)}
+																	>
+																		✕
+																	</button>
+																</>
+															) : (
+																<>
+																	<span className="truncate">
+																		{cat.name}
+																		{count > 0 && (
+																			<span className="ml-1.5 text-muted">({count})</span>
+																		)}
+																	</span>
+																	<button
+																		type="button"
+																		className="shrink-0 rounded-full px-1.5 text-muted transition-colors hover:text-sage"
+																		aria-label={`Rename ${cat.name}`}
+																		onClick={() => {
+																			setEditingCategoryId(cat._id)
+																			setEditingCategoryName(cat.name)
+																		}}
+																	>
+																		✎
+																	</button>
+																	<button
+																		type="button"
+																		className="shrink-0 rounded-full px-1.5 text-muted transition-colors hover:text-[#A0524B]"
+																		aria-label={`Delete ${cat.name}`}
+																		onClick={() => removeCategory(cat._id)}
+																	>
+																		✕
+																	</button>
+																</>
+															)}
+														</li>
+													)
+												})}
+											</ul>
 										)}
-									</li>
+									</div>
 								)
 							})}
-						</ul>
+						</div>
 					)}
 				</div>
 			</section>}

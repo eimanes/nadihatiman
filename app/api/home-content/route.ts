@@ -6,13 +6,23 @@ import { requirePermission } from "@/lib/permissions"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  if (!isMongoConfigured()) return NextResponse.json({ content: defaultHomeContent })
+  // Serve from the browser cache first (stale-while-revalidate): repeat
+  // visits paint instantly, then the fetch above refreshes the cache. The
+  // Cloudinary media URLs it carries are effectively immutable, so a short
+  // max-age with revalidation keeps content edits visible quickly.
+  const headers = {
+    "Cache-Control": "public, max-age=60, stale-while-revalidate=86400",
+  }
+  if (!isMongoConfigured()) return NextResponse.json({ content: defaultHomeContent }, { headers })
   try {
     const db = await getDb()
     const doc = await db.collection("site_content").findOne({ key: "home" })
-    return NextResponse.json({ content: isHomeContent(doc?.content) ? doc.content : defaultHomeContent })
+    return NextResponse.json(
+      { content: isHomeContent(doc?.content) ? doc.content : defaultHomeContent },
+      { headers },
+    )
   } catch {
-    return NextResponse.json({ content: defaultHomeContent })
+    return NextResponse.json({ content: defaultHomeContent }, { headers })
   }
 }
 
