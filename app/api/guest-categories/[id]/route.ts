@@ -13,5 +13,5 @@ export async function PATCH(req: Request, { params }: Params) {
 /** Delete a category — guests using it are unassigned (category → ""). */
 export async function DELETE(_req: Request, { params }: Params) {
 	const { id } = await params
-	return deleteOption(CATEGORIES_CONFIG, id)
+	return deleteOption(CATEGORIES_CONFIG, _req, id)
 }

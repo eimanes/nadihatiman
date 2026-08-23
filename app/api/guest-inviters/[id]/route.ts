@@ -13,5 +13,5 @@ export async function PATCH(req: Request, { params }: Params) {
 /** Delete an inviter — guests using it are unassigned (invitedBy → ""). */
 export async function DELETE(_req: Request, { params }: Params) {
 	const { id } = await params
-	return deleteOption(INVITERS_CONFIG, id)
+	return deleteOption(INVITERS_CONFIG, _req, id)
 }

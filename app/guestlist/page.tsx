@@ -233,9 +233,6 @@ export default function GuestlistPage() {
 	const canEditEvent = (ev: Guest["event"]) =>
 		!eventScope || eventScope.includes("general") || eventScope.includes(ev)
 	const canEditGuest = (g: Guest) => canEdit && canEditEvent(g.event)
-	// Option lists / CSV import affect every event — scoped editors only.
-	const canManageLists =
-		canEdit && (!eventScope || eventScope.includes("general"))
 
 	// Row editing — guests are edited through a form with an explicit Save.
 	const [editingId, setEditingId] = useState<string | null>(null)
@@ -262,6 +259,8 @@ export default function GuestlistPage() {
 	const [phone, setPhone] = useState("")
 	const [invitedBy, setInvitedBy] = useState("")
 	const [category, setCategory] = useState("")
+	// List changes are authorized against the active guest event.
+	const canManageLists = canEdit && canEditEvent(event)
 
 	// Inviter manager
 	const [newInviter, setNewInviter] = useState("")
@@ -378,7 +377,7 @@ export default function GuestlistPage() {
 			const res = await fetch("/api/guest-inviters", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: trimmed }),
+				body: JSON.stringify({ name: trimmed, event }),
 			})
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Error adding inviter.")
@@ -397,7 +396,7 @@ export default function GuestlistPage() {
 			const res = await fetch("/api/guest-categories", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: trimmed, owner }),
+				body: JSON.stringify({ name: trimmed, owner, event }),
 			})
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Error adding category.")
@@ -419,7 +418,7 @@ export default function GuestlistPage() {
 			const res = await fetch(`/api/guest-inviters/${id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: trimmed }),
+				body: JSON.stringify({ name: trimmed, event }),
 			})
 			if (!res.ok) {
 				const data = await res.json()
@@ -448,7 +447,11 @@ export default function GuestlistPage() {
 		const prev = inviters.find((i) => i._id === id)
 		setInviters((list) => list.filter((i) => i._id !== id))
 		try {
-			const res = await fetch(`/api/guest-inviters/${id}`, { method: "DELETE" })
+			const res = await fetch(`/api/guest-inviters/${id}`, {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ event }),
+			})
 			if (!res.ok) {
 				const data = await res.json()
 				throw new Error(data.error ?? "Error deleting inviter.")
@@ -482,7 +485,7 @@ export default function GuestlistPage() {
 			const res = await fetch(`/api/guest-categories/${id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(owner !== undefined ? { name: trimmed, owner } : { name: trimmed }),
+				body: JSON.stringify(owner !== undefined ? { name: trimmed, owner, event } : { name: trimmed, event }),
 			})
 			if (!res.ok) {
 				const data = await res.json()
@@ -510,7 +513,11 @@ export default function GuestlistPage() {
 		const prev = categories.find((c) => c._id === id)
 		setCategories((list) => list.filter((c) => c._id !== id))
 		try {
-			const res = await fetch(`/api/guest-categories/${id}`, { method: "DELETE" })
+			const res = await fetch(`/api/guest-categories/${id}`, {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ event }),
+			})
 			if (!res.ok) {
 				const data = await res.json()
 				throw new Error(data.error ?? "Error deleting category.")

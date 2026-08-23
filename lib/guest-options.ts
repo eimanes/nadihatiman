@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
-import { requirePermission } from "@/lib/permissions"
+import { requireGuestEvent } from "@/lib/permissions"
 
 /**
  * Shared helpers for the two customizable guest-list option lists:
@@ -95,7 +95,14 @@ export async function createOption(
 	config: OptionListConfig,
 	req: Request,
 ): Promise<NextResponse> {
-	const editor = await requirePermission("edit_guests")
+	const body = await req.clone().json().catch(() => ({}))
+	const event = typeof body.event === "string" ? body.event : ""
+	if (!event) {
+		return NextResponse.json({ error: "An event is required for this action." }, { status: 400 })
+	}
+	const editor = await requireGuestEvent(
+		event,
+	)
 	if (!editor.ok) {
 		return NextResponse.json({ error: editor.error }, { status: editor.status })
 	}
@@ -103,7 +110,6 @@ export async function createOption(
 		return NextResponse.json(NOT_CONFIGURED, { status: 503 })
 	}
 	try {
-		const body = await req.json()
 		const name = typeof body.name === "string" ? body.name.trim() : ""
 		if (!name) {
 			return NextResponse.json(
@@ -166,7 +172,14 @@ export async function renameOption(
 	req: Request,
 	id: string,
 ): Promise<NextResponse> {
-	const editor = await requirePermission("edit_guests")
+	const body = await req.clone().json().catch(() => ({}))
+	const event = typeof body.event === "string" ? body.event : ""
+	if (!event) {
+		return NextResponse.json({ error: "An event is required for this action." }, { status: 400 })
+	}
+	const editor = await requireGuestEvent(
+		event,
+	)
 	if (!editor.ok) {
 		return NextResponse.json({ error: editor.error }, { status: editor.status })
 	}
@@ -174,7 +187,6 @@ export async function renameOption(
 		return NextResponse.json(NOT_CONFIGURED, { status: 503 })
 	}
 	try {
-		const body = await req.json()
 		const name = typeof body.name === "string" ? body.name.trim() : ""
 		if (!name) {
 			return NextResponse.json(
@@ -271,9 +283,17 @@ export async function cascadeInviterRename(
 /** DELETE — remove an option and unassign guests that used it. */
 export async function deleteOption(
 	config: OptionListConfig,
+	req: Request,
 	id: string,
 ): Promise<NextResponse> {
-	const editor = await requirePermission("edit_guests")
+	const body = await req.json().catch(() => ({}))
+	const event = typeof body.event === "string" ? body.event : ""
+	if (!event) {
+		return NextResponse.json({ error: "An event is required for this action." }, { status: 400 })
+	}
+	const editor = await requireGuestEvent(
+		event,
+	)
 	if (!editor.ok) {
 		return NextResponse.json({ error: editor.error }, { status: editor.status })
 	}
