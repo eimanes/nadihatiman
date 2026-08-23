@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { requireAnyPermission } from "@/lib/permissions"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 import { loadSettings } from "@/lib/settings"
-
 export const dynamic = "force-dynamic"
 
 const NOT_CONFIGURED = {
@@ -38,8 +37,42 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Invalid budget sheet URL." }, { status: 400 })
     }
     const db = await getDb()
+
+    // Scoped schedule editors may only update THEIR events. Their payload's
+    // other events are replaced with the stored versions so a scoped editor
+    // can never touch (or clobber) out-of-scope events.
+    const scope = editor.viewer.eventScope
+    let eventsToSave: unknown = events
+    if (canEditSchedule && scope && !scope.includes("general") && Array.isArray(events)) {
+      const allowed = new Set<string>(scope)
+      const stored = await db.collection("settings").findOne({ key: "site" })
+      const storedEvents = Array.isArray(
+        (stored as { events?: unknown } | null)?.events,
+      )
+        ? ((stored as unknown as { events: Array<{ id: string }> }).events ?? [])
+        : []
+      const sentById = new Map(events.map((e: { id: string }) => [e.id, e]))
+      eventsToSave = storedEvents.map(
+        (storedEvent) => sentById.get(storedEvent.id) ?? storedEvent,
+      )
+      // Any event ids in the payload that aren't in the stored list at all
+      // (or are out of scope) must be rejected — scoped editors can't add
+      // or remove events either.
+      const changedOutOfScope = events.filter(
+        (e: { id: string }) => !storedEvents.some((s) => s.id === e.id) || !allowed.has(e.id),
+      )
+      if (changedOutOfScope.length > 0) {
+        return NextResponse.json(
+          {
+            error: `You can only edit the schedule for: ${scope.join(", ")}. Other events, adding or removing events are managed by full-access editors.`,
+          },
+          { status: 403 },
+        )
+      }
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() }
-    if (canEditSchedule) Object.assign(updates, { events, invitations, guestlists })
+    if (canEditSchedule) Object.assign(updates, { events: eventsToSave, invitations, guestlists })
     if (canEditBudget && typeof budgetSheetUrl === "string") updates.budgetSheetUrl = budgetSheetUrl.trim()
     await db.collection("settings").updateOne(
       { key: "site" },

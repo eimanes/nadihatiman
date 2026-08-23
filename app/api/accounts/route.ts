@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
-import { PERMISSIONS, requireSuperadmin } from "@/lib/permissions"
+import {
+  GUEST_EVENT_SCOPES,
+  PERMISSIONS,
+  requireSuperadmin,
+  validGuestEventScope,
+} from "@/lib/permissions"
 
 export const dynamic = "force-dynamic"
 
@@ -21,9 +26,9 @@ export async function GET() {
   return NextResponse.json({
     accounts: accounts.map((account) => ({ ...account, _id: account._id.toString() })),
     permissions: PERMISSIONS,
+    guestEventScopes: GUEST_EVENT_SCOPES,
     defaultSuperadmins: ["es.swimmer15@gmail.com", "eimansalleh.5@gmail.com", "eimansalleh.15@gmail.com", "nadiaazamiera99@gmail.com"],
-  })
-}
+  })}
 
 export async function POST(req: Request) {
   const superadmin = await requireSuperadmin()
@@ -44,6 +49,14 @@ export async function POST(req: Request) {
       )
     : []
   const role = body.role === "superadmin" ? "superadmin" : "account"
+  // Event scope applies to ANY editor permission (schedule, checklist,
+  // guests, budget). Unchecked → null keeps the legacy behaviour (all
+  // events); superadmins are never scoped.
+  const scope = validGuestEventScope(body.eventScope)
+  const eventScope =
+    role === "account" && permissions.length > 0 && scope.length > 0
+      ? scope
+      : null
   const db = await getDb()
   await db.collection("account_permissions").updateOne(
     { email },
@@ -52,6 +65,7 @@ export async function POST(req: Request) {
         email,
         permissions,
         role,
+        eventScope,
         updatedAt: new Date().toISOString(),
         updatedBy: superadmin.viewer.email,
       },

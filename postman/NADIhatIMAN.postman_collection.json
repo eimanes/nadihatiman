@@ -119,7 +119,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "guests"]
 						},
-						"description": "Requires edit_guests. `invitedBy` and `category` are optional (\"\" = unassigned). Returns 201 { guest }."
+						"description": "Requires edit_guests. Scoped accounts (eventScope) can only add guests to their own events — adding a guest of another event returns 403. `invitedBy` and `category` are optional (\"\" = unassigned). Returns 201 { guest }."
 					}
 				},
 				{
@@ -169,7 +169,7 @@
 								}
 							]
 						},
-						"description": "Requires edit_guests. Any subset of fields can be sent: name, event, side, invitedBy, category, pax, phone, note, status. Send invitedBy/category: \"\" to unassign. Returns { ok: true }."
+						"description": "Requires edit_guests. Scoped accounts (eventScope) can only update guests of their own events; moving a guest into an out-of-scope event is rejected too. Any subset of fields can be sent: name, event, side, invitedBy, category, pax, phone, note, status. Send invitedBy/category: \"\" to unassign. Returns { ok: true } or 404/403."
 					}
 				},
 				{
@@ -188,7 +188,7 @@
 								}
 							]
 						},
-						"description": "Requires edit_guests. Returns { ok: true }."
+						"description": "Requires edit_guests. Scoped accounts (eventScope) can only delete guests of their own events. Returns { ok: true }, 404 if not found, or 403 if out of scope."
 					}
 				}
 			]
@@ -419,7 +419,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "checklist"]
 						},
-						"description": "Requires edit_checklist. Returns 201 { item }. Also accepts { items: [...] } for bulk seed."
+						"description": "Requires edit_checklist. Scoped accounts (eventScope) can only add tasks of their own events; \"umum\" tasks need the \"general\" scope. Returns 201 { item }. Also accepts { items: [...] } for bulk seed (scope-checked per row)."
 					}
 				},
 				{
@@ -447,7 +447,7 @@
 								}
 							]
 						},
-						"description": "Requires edit_checklist. Accepts done, task, event, category."
+						"description": "Requires edit_checklist. Scoped accounts (eventScope) can only update tasks of their own events; moving a task out of scope is rejected. Accepts done, task, event, category."
 					}
 				},
 				{
@@ -466,7 +466,7 @@
 								}
 							]
 						},
-						"description": "Requires edit_checklist."
+						"description": "Requires edit_checklist. Scoped accounts (eventScope) can only delete tasks of their own events."
 					}
 				}
 			]
@@ -530,7 +530,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "settings"]
 						},
-						"description": "Requires edit_schedule (events/invitations/guestlists) and/or edit_budget (budgetSheetUrl). Load first, edit, then PUT the whole object back."
+						"description": "Requires edit_schedule (events/invitations/guestlists) and/or edit_budget (budgetSheetUrl). Load first, edit, then PUT the whole object back. Scoped accounts (eventScope, no \"general\") may only update their own events — their payloads for other events are replaced with the stored versions, and adding/removing events is rejected with 403. Invitations & guestlists are full-access only."
 					}
 				}
 			]
@@ -704,7 +704,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "accounts"]
 						},
-						"description": "Requires superadmin. Returns { accounts, permissions, defaultSuperadmins }."
+						"description": "Requires superadmin. Returns { accounts, permissions, guestEventScopes, defaultSuperadmins }. Each account includes eventScope (null = full access)."
 					}
 				},
 				{
@@ -719,14 +719,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"helper@example.com\",\n  \"permissions\": [\"edit_guests\"],\n  \"role\": \"account\"\n}"
+							"raw": "{\n  \"email\": \"helper@example.com\",\n  \"permissions\": [\"edit_guests\"],\n  \"role\": \"account\",\n  \"eventScope\": [\"sanding\"]\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/accounts",
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "accounts"]
 						},
-						"description": "Requires superadmin. Upserts by email. role: account|superadmin. permissions ⊆ [edit_schedule, edit_checklist, edit_guests, view_budget, edit_budget]."
+						"description": "Requires superadmin. Upserts by email. role: account|superadmin. permissions ⊆ [edit_schedule, edit_checklist, edit_guests, view_budget, edit_budget]. eventScope ⊆ [general, nikah, sanding, tandang] — limits the account's EDITING (schedule, checklist, guests, budget) to those events (general = all). Applies whenever any edit_* permission is granted. Leave it out / empty for full access."
 					}
 				},
 				{
@@ -741,7 +741,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"permissions\": [\"edit_guests\", \"edit_checklist\"],\n  \"role\": \"account\"\n}"
+							"raw": "{\n  \"permissions\": [\"edit_guests\", \"edit_checklist\"],\n  \"role\": \"account\",\n  \"eventScope\": [\"nikah\", \"tandang\"]\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/accounts/:id",

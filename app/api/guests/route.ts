@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requirePermission } from "@/lib/permissions"
+import { requireGuestEvent } from "@/lib/permissions"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 
 export const dynamic = "force-dynamic"
@@ -36,7 +36,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-	const editor = await requirePermission("edit_guests")
+	const editor = await requireGuestEvent()
 	if (!editor.ok) {
 		return NextResponse.json({ error: editor.error }, { status: editor.status })
 	}
@@ -49,6 +49,27 @@ export async function POST(req: Request) {
 		// Bulk import support (e.g. guest data exported from Canva as CSV):
 		// { guests: [{ name, event, side, pax, phone, note, status, invitedBy, category }, ...] }
 		if (Array.isArray(body.guests)) {
+			// Scoped editors may only import rows for their own events.
+			const scopeCheck = await requireGuestEvent()
+			if (!scopeCheck.ok) {
+				return NextResponse.json({ error: scopeCheck.error }, { status: scopeCheck.status })
+			}
+			if (scopeCheck.viewer.eventScope && !scopeCheck.viewer.eventScope.includes("general")) {
+				const allowed = new Set<string>(scopeCheck.viewer.eventScope)
+				const blocked = body.guests.filter(
+					(g: { event?: string }) => g.event && !allowed.has(g.event),
+				)
+				if (blocked.length > 0) {
+					return NextResponse.json(
+						{
+						error: `You can only import guests for: ${scopeCheck.viewer.eventScope.join(
+								", ",
+							)}. Remove ${blocked.length} guest(s) from other events first.`,
+						},
+						{ status: 403 },
+					)
+				}
+			}
 			const now = new Date().toISOString()
 			const docs = body.guests
 				.map((g: Record<string, unknown>) => ({
@@ -87,8 +108,13 @@ export async function POST(req: Request) {
 				{ error: "Guest name is required." },
 				{ status: 400 },
 			)
-		}
-		const doc = {
+		}		// Scoped editors can only add guests to their own events.
+		const scopeCheck = await requireGuestEvent(
+			EVENTS.includes(body.event) ? body.event : undefined,
+		)
+		if (!scopeCheck.ok) {
+			return NextResponse.json({ error: scopeCheck.error }, { status: scopeCheck.status })
+		}		const doc = {
 			name,
 			event: EVENTS.includes(body.event) ? body.event : "sanding",
 			side: SIDES.includes(body.side) ? body.side : "groom",

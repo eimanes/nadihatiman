@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { defaultHomeContent, isHomeContent } from "@/lib/home-content"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
-import { requirePermission } from "@/lib/permissions"
+import { requireScoped } from "@/lib/permissions"
 
 export const dynamic = "force-dynamic"
 
@@ -27,7 +27,15 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const editor = await requirePermission("edit_schedule")
+  const editor = await requireScoped("edit_schedule", "home content")
+  // Home content (hero, story, chapters) is site-wide — not tied to one
+  // event — so only unscoped / "general" editors may change it.
+  if (editor.ok && editor.viewer.eventScope && !editor.viewer.eventScope.includes("general")) {
+    return NextResponse.json(
+      { error: "Home content is site-wide; only full-access editors can change it." },
+      { status: 403 },
+    )
+  }
   if (!editor.ok) return NextResponse.json({ error: editor.error }, { status: editor.status })
   if (!isMongoConfigured()) return NextResponse.json({ error: "Storage is not configured." }, { status: 503 })
   const body = await req.json()

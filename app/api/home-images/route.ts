@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { cloudinary, isCloudinaryConfigured } from "@/lib/cloudinary"
-import { requirePermission } from "@/lib/permissions"
+import { requireScoped } from "@/lib/permissions"
 
 export const runtime = "nodejs"
 
@@ -10,7 +10,14 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
 
 export async function POST(req: Request) {
-  const editor = await requirePermission("edit_schedule")
+  // Home images are site-wide content — only unscoped / "general" editors.
+  const editor = await requireScoped("edit_schedule", "home images")
+  if (editor.ok && editor.viewer.eventScope && !editor.viewer.eventScope.includes("general")) {
+    return NextResponse.json(
+      { error: "Home images are site-wide; only full-access editors can change them." },
+      { status: 403 },
+    )
+  }
   if (!editor.ok) return NextResponse.json({ error: editor.error }, { status: editor.status })
   if (!isCloudinaryConfigured()) return NextResponse.json({ error: "Cloudinary is not configured." }, { status: 503 })
 
@@ -47,7 +54,13 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const editor = await requirePermission("edit_schedule")
+  const editor = await requireScoped("edit_schedule", "home images")
+  if (editor.ok && editor.viewer.eventScope && !editor.viewer.eventScope.includes("general")) {
+    return NextResponse.json(
+      { error: "Home images are site-wide; only full-access editors can change them." },
+      { status: 403 },
+    )
+  }
   if (!editor.ok) return NextResponse.json({ error: editor.error }, { status: editor.status })
   if (!isCloudinaryConfigured()) return NextResponse.json({ error: "Cloudinary is not configured." }, { status: 503 })
   const body = await req.json()

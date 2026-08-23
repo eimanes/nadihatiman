@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
-import { PERMISSIONS, requireSuperadmin } from "@/lib/permissions"
+import { PERMISSIONS, requireSuperadmin, validGuestEventScope } from "@/lib/permissions"
 import { DEFAULT_SUPERADMIN_EMAILS } from "@/lib/permission-types"
 
 type Params = { params: Promise<{ id: string }> }
@@ -32,9 +32,17 @@ export async function PATCH(req: Request, { params }: Params) {
     const count = await db.collection("account_permissions").countDocuments({ role: "superadmin" })
     if (count <= 1) return NextResponse.json({ error: "Keep at least one managed superadmin." }, { status: 400 })
   }
+  // Event scope applies to ANY editor permission (schedule, checklist,
+  // guests, budget); an unchecked editor keeps full access (legacy
+  // behaviour), superadmins are never scoped.
+  const scope = validGuestEventScope(body.eventScope)
+  const eventScope =
+    role === "account" && permissions.length > 0 && scope.length > 0
+      ? scope
+      : null
   await db.collection("account_permissions").updateOne(
     { _id: new ObjectId(id) },
-    { $set: { permissions, role, updatedAt: new Date().toISOString(), updatedBy: superadmin.viewer.email } },
+    { $set: { permissions, role, eventScope, updatedAt: new Date().toISOString(), updatedBy: superadmin.viewer.email } },
   )
   return NextResponse.json({ ok: true })
 }

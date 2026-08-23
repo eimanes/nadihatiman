@@ -96,7 +96,7 @@ const stepTimeDisplay = (startAt?: string, endAt?: string) => {
 }
 
 export default function AdminPage() {
-  const { isSuperadmin, can, loaded: permissionsLoaded } = usePermissions()
+  const { isSuperadmin, can, eventScope, loaded: permissionsLoaded } = usePermissions()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [configured, setConfigured] = useState(true)
   const [persisted, setPersisted] = useState(false)
@@ -109,10 +109,18 @@ export default function AdminPage() {
   const [eventIdx, setEventIdx] = useState(0)
   const canEditSchedule = isSuperadmin || can("edit_schedule")
   const canEditBudget = isSuperadmin || can("edit_budget")
+  // Scoped editors can only edit the events in their scope; invitations &
+  // guestlists affect all events, so they stay full-access only.
+  const hasEventScope = Boolean(eventScope && !eventScope.includes("general"))
+  const canEditEventId = (id: string) =>
+    !hasEventScope || !eventScope ? true : eventScope.includes(id as never)
+  const isFullScheduleEditor = canEditSchedule && !hasEventScope
   const availableTabs: { id: "events" | "invitations" | "guestlists" | "budget"; label: string }[] = [
     ...(canEditSchedule
+      ? [{ id: "events" as const, label: "Events & Schedule" }]
+      : []),
+    ...(isFullScheduleEditor
       ? [
-          { id: "events" as const, label: "Events & Schedule" },
           { id: "invitations" as const, label: "Invitations" },
           { id: "guestlists" as const, label: "Guestlist" },
         ]
@@ -145,6 +153,17 @@ export default function AdminPage() {
       setTab(availableTabs[0]?.id ?? "events")
     }
   }, [permissionsLoaded, tab, availableTabs])
+
+  // Keep the selected event inside the editor's scope.
+  useEffect(() => {
+    if (!settings) return
+    const current = settings.events[eventIdx]
+    if (current && !canEditEventId(current.id)) {
+      const first = settings.events.findIndex((e) => canEditEventId(e.id))
+      if (first >= 0) setEventIdx(first)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, eventScope, permissionsLoaded])
 
   /* ── immutable update helpers ── */
 
@@ -470,19 +489,24 @@ export default function AdminPage() {
       {tab === "events" && ev && (
         <div className="space-y-5">
           <div className="flex flex-wrap gap-1.5">
-            {settings.events.map((e, i) => (
-              <button
-                key={e.id}
-                onClick={() => setEventIdx(i)}
-                className={`rounded-full px-4 py-1.5 text-[12px] transition-colors ${
-                  eventIdx === i
-                    ? "bg-ink text-white"
-                    : "border border-line bg-white text-muted hover:text-ink"
-                }`}
-              >
-                {e.emoji} {e.name}
-              </button>
-            ))}
+            {settings.events.map((e, i) => {
+              const selectable = canEditEventId(e.id)
+              return (
+                <button
+                  key={e.id}
+                  onClick={() => selectable && setEventIdx(i)}
+                  disabled={!selectable}
+                  title={selectable ? undefined : "Outside your editing scope"}
+                  className={`rounded-full px-4 py-1.5 text-[12px] transition-colors ${
+                    eventIdx === i
+                      ? "bg-ink text-white"
+                      : "border border-line bg-white text-muted hover:text-ink"
+                  } ${!selectable ? "cursor-not-allowed opacity-40" : ""}`}
+                >
+                  {e.emoji} {e.name}
+                </button>
+              )
+            })}
           </div>
 
           {/* Basic details */}

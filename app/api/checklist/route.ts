@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requirePermission } from "@/lib/permissions"
+import { requireScoped } from "@/lib/permissions"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 
 export const dynamic = "force-dynamic"
@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const editor = await requirePermission("edit_checklist")
+  const editor = await requireScoped("edit_checklist", "the checklist")
   if (!editor.ok) {
     return NextResponse.json({ error: editor.error }, { status: editor.status })
   }
@@ -44,6 +44,22 @@ export async function POST(req: Request) {
 
     // Bulk seed support: { items: [...] }
     if (Array.isArray(body.items)) {
+      // Scoped editors may only seed their own events ("umum" needs "general").
+      const scope = editor.viewer.eventScope
+      if (scope && !scope.includes("general")) {
+        const blocked = body.items.filter(
+          (i: { event?: string }) => i.event && i.event !== "umum" && !scope.includes(i.event as never),
+        )
+        const blockedUmum = body.items.some((i: { event?: string }) => (i.event ?? "umum") === "umum")
+        if (blocked.length > 0 || blockedUmum) {
+          return NextResponse.json(
+            {
+              error: `You can only seed the checklist for: ${scope.join(", ")}. Remove tasks of other events first.`,
+            },
+            { status: 403 },
+          )
+        }
+      }
       const docs = body.items
         .filter((i: { task?: string }) => typeof i.task === "string" && i.task.trim())
         .map((i: { task: string; event?: string; category?: string }) => ({
@@ -64,6 +80,15 @@ export async function POST(req: Request) {
     const task = typeof body.task === "string" ? body.task.trim() : ""
     if (!task) {
       return NextResponse.json({ error: "Task is required." }, { status: 400 })
+    }
+    // Scoped editors can only add tasks to their own events (umum → general).
+    const scopeCheck = await requireScoped(
+      "edit_checklist",
+      "the checklist",
+      body.event === "umum" ? "general" : body.event || "umum",
+    )
+    if (!scopeCheck.ok) {
+      return NextResponse.json({ error: scopeCheck.error }, { status: scopeCheck.status })
     }
     const doc = {
       task,

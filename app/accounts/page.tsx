@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { usePermissions } from "@/hooks/usePermissions"
-import { DEFAULT_SUPERADMIN_EMAILS, PERMISSIONS, type Permission } from "@/lib/permission-types"
+import {
+  DEFAULT_SUPERADMIN_EMAILS,
+  GUEST_EVENT_SCOPES,
+  PERMISSIONS,
+  type AccountRecord,
+  type GuestEventScope,
+  type Permission,
+} from "@/lib/permission-types"
 
 const LABELS: Record<Permission, string> = {
   edit_schedule: "Edit schedule",
@@ -12,12 +19,14 @@ const LABELS: Record<Permission, string> = {
   edit_budget: "Edit budget",
 }
 
-type Account = {
-  _id: string
-  email: string
-  permissions: Permission[]
-  role?: "account" | "superadmin"
+const SCOPE_LABELS: Record<GuestEventScope, string> = {
+  general: "General (all events)",
+  nikah: "💍 Nikah",
+  sanding: "🌸 Sanding",
+  tandang: "🏡 Tandang",
 }
+
+type Account = AccountRecord & { _id: string }
 
 export default function AccountsPage() {
   const { isSuperadmin, loaded } = usePermissions()
@@ -25,6 +34,7 @@ export default function AccountsPage() {
   const [email, setEmail] = useState("")
   const [selected, setSelected] = useState<Permission[]>([])
   const [role, setRole] = useState<"account" | "superadmin">("account")
+  const [eventScope, setEventScope] = useState<GuestEventScope[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -47,6 +57,21 @@ export default function AccountsPage() {
         : [...current, permission],
     )
 
+  const toggleScope = (scope: GuestEventScope) =>
+    setEventScope((current) =>
+      current.includes(scope)
+        ? current.filter((value) => value !== scope)
+        : [...current, scope],
+    )
+
+  const hasEditPermission = (permissions: Permission[]) =>
+    permissions.some((p) => p.startsWith("edit_"))
+
+  // Send the scope only when it applies; the API keeps full access when
+  // an editor has no scopes checked.
+  const scopeFor = (permissions: Permission[], scopes: GuestEventScope[] | null | undefined) =>
+    hasEditPermission(permissions) && scopes && scopes.length > 0 ? scopes : null
+
   const addAccount = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!email.trim() || saving) return
@@ -55,13 +80,14 @@ export default function AccountsPage() {
       const response = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, permissions: selected, role }),
+        body: JSON.stringify({ email, permissions: selected, role, eventScope: scopeFor(selected, eventScope) }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error ?? "Could not save account.")
       setEmail("")
       setSelected([])
       setRole("account")
+      setEventScope([])
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save account.")
@@ -75,7 +101,13 @@ export default function AccountsPage() {
     const response = await fetch(`/api/accounts/${account._id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ permissions: patch.permissions ?? account.permissions, role: patch.role ?? account.role ?? "account" }),
+      body: JSON.stringify({
+        permissions: patch.permissions ?? account.permissions,
+        role: patch.role ?? account.role ?? "account",
+        eventScope: patch.eventScope !== undefined
+          ? scopeFor(patch.permissions ?? account.permissions, patch.eventScope)
+          : scopeFor(account.permissions, account.eventScope),
+      }),
     })
     if (!response.ok) {
       const data = await response.json()
@@ -149,6 +181,23 @@ export default function AccountsPage() {
             </label>
           ))}
         </div>
+        {hasEditPermission(selected) && role === "account" && (
+          <div className="mt-4 rounded-xl border border-gold/40 bg-[#FBF6EC] p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">Editing scope — by event</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-muted">
+              Limit which events this account can edit — this applies to the schedule, checklist,
+              guest list and budget. Leave all unchecked for full access to every event.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {GUEST_EVENT_SCOPES.map((scope) => (
+                <label key={scope} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-[13px] text-ink">
+                  <input type="checkbox" checked={eventScope.includes(scope)} onChange={() => toggleScope(scope)} className="h-4 w-4 accent-sage" />
+                  {SCOPE_LABELS[scope]}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </form>
 
       <div className="space-y-3">
@@ -175,6 +224,33 @@ export default function AccountsPage() {
                 </label>
               ))}
             </div>
+            {hasEditPermission(account.permissions) && account.role !== "superadmin" && (
+              <div className="mt-4 rounded-xl border border-gold/40 bg-[#FBF6EC] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold">Editing scope — by event</p>
+                <p className="mt-1 text-[12px] leading-relaxed text-muted">
+                  Applies to schedule, checklist, guest list and budget. Leave all unchecked for
+                  full access to every event.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {GUEST_EVENT_SCOPES.map((scope) => (
+                    <label key={scope} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-[13px] text-ink">
+                      <input
+                        type="checkbox"
+                        checked={(account.eventScope ?? []).includes(scope)}
+                        onChange={() => {
+                          const current = account.eventScope ?? []
+                          updateAccount(account, { eventScope: current.includes(scope)
+                            ? current.filter((value) => value !== scope)
+                            : [...current, scope] })
+                        }}
+                        className="h-4 w-4 accent-sage"
+                      />
+                      {SCOPE_LABELS[scope]}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <label className="mt-4 flex items-center gap-2 text-[13px] text-ink"><input type="checkbox" checked={false} onChange={(e) => e.target.checked && updateAccount(account, { role: "superadmin" })} className="h-4 w-4 accent-sage" /> Promote to superadmin</label>
           </section>
         ))}

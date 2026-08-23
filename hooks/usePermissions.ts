@@ -9,6 +9,7 @@ const empty: ViewerPermissions = {
   email: null,
   isSuperadmin: false,
   permissions: [],
+  eventScope: null,
 }
 
 export function usePermissions() {

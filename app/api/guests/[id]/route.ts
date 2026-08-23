@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
-import { requirePermission } from "@/lib/permissions"
+import { requireGuestEvent, getViewerPermissions } from "@/lib/permissions"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 
 export const dynamic = "force-dynamic"
@@ -18,7 +18,7 @@ export async function PATCH(
 	req: Request,
 	context: { params: Promise<{ id: string }> },
 ) {
-	const editor = await requirePermission("edit_guests")
+	const editor = await requireGuestEvent()
 	if (!editor.ok) {
 		return NextResponse.json({ error: editor.error }, { status: editor.status })
 	}
@@ -28,6 +28,19 @@ export async function PATCH(
 	try {
 		const { id } = await context.params
 		const body = await req.json()
+		// Scoped editors can only touch guests of their own events. The
+		// check uses the event AFTER the update so moving a guest into an
+		// out-of-scope event is blocked as well.
+		const db0 = await getDb()
+		const existing = await db0.collection("guests").findOne({ _id: new ObjectId(id) })
+		if (!existing) {
+			return NextResponse.json({ error: "Guest not found." }, { status: 404 })
+		}
+		const nextEvent = EVENTS.includes(body.event) ? body.event : existing.event
+		const scopeCheck = await requireGuestEvent(nextEvent)
+		if (!scopeCheck.ok) {
+			return NextResponse.json({ error: scopeCheck.error }, { status: scopeCheck.status })
+		}
 		const updates: Record<string, unknown> = {}
 		if (typeof body.name === "string" && body.name.trim()) {
 			updates.name = body.name.trim()
@@ -71,7 +84,7 @@ export async function DELETE(
 	_req: Request,
 	context: { params: Promise<{ id: string }> },
 ) {
-	const editor = await requirePermission("edit_guests")
+	const editor = await requireGuestEvent()
 	if (!editor.ok) {
 		return NextResponse.json({ error: editor.error }, { status: editor.status })
 	}
@@ -80,6 +93,16 @@ export async function DELETE(
 	}
 	try {
 		const { id } = await context.params
+		// Scoped editors can only delete guests of their own events.
+		const db0 = await getDb()
+		const existing = await db0.collection("guests").findOne({ _id: new ObjectId(id) })
+		if (!existing) {
+			return NextResponse.json({ error: "Guest not found." }, { status: 404 })
+		}
+		const scopeCheck = await requireGuestEvent(existing.event)
+		if (!scopeCheck.ok) {
+			return NextResponse.json({ error: scopeCheck.error }, { status: scopeCheck.status })
+		}
 		const db = await getDb()
 		await db.collection("guests").deleteOne({ _id: new ObjectId(id) })
 		return NextResponse.json({ ok: true })

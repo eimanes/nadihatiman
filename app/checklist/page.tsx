@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Reveal from "@/components/Reveal"
 import { usePermissions } from "@/hooks/usePermissions"
+import type { GuestEventScope } from "@/lib/permission-types"
 
 type ChecklistItem = {
   _id: string
@@ -47,7 +48,7 @@ const DEFAULT_ITEMS = [
 ]
 
 export default function ChecklistPage() {
-  const { can } = usePermissions()
+  const { can, eventScope } = usePermissions()
   const [items, setItems] = useState<ChecklistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +59,12 @@ export default function ChecklistPage() {
   const [busy, setBusy] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const canEdit = can("edit_checklist")
+  // Scoped editors may only edit tasks of their own events. "umum"
+  // (general) tasks require the "general" scope.
+  const hasScope = Boolean(eventScope && !eventScope.includes("general"))
+  const canEditEvent = (ev: string) =>
+    !hasScope || !eventScope ? true : ev === "umum" ? eventScope.includes("general") : eventScope.includes(ev as GuestEventScope)
+  const canEditItem = (item: ChecklistItem) => canEdit && canEditEvent(item.event)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -81,6 +88,14 @@ export default function ChecklistPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Keep the add-form event inside the editor's scope.
+  useEffect(() => {
+    if (!hasScope || canEditEvent(event)) return
+    const first = ["umum", ...EVENT_OPTIONS.map((o) => o.id)].find(canEditEvent)
+    if (first) setEvent(first)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventScope, canEdit])
 
   const addItem = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -120,7 +135,7 @@ export default function ChecklistPage() {
   }
 
   const toggle = async (item: ChecklistItem) => {
-    if (!canEdit) return
+    if (!canEditItem(item)) return
     setItems((prev) =>
       prev.map((i) => (i._id === item._id ? { ...i, done: !i.done } : i)),
     )
@@ -132,7 +147,7 @@ export default function ChecklistPage() {
   }
 
   const remove = async (item: ChecklistItem) => {
-    if (!canEdit) return
+    if (!canEditItem(item)) return
     setItems((prev) => prev.filter((i) => i._id !== item._id))
     await fetch(`/api/checklist/${item._id}`, { method: "DELETE" })
   }
@@ -203,7 +218,7 @@ export default function ChecklistPage() {
           onChange={(e) => setEvent(e.target.value)}
           className="rounded-full border border-line bg-white px-3 py-2 text-[13px]"
         >
-          {EVENT_OPTIONS.map((o) => (
+          {EVENT_OPTIONS.filter((o) => canEditEvent(o.id)).map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
@@ -290,20 +305,20 @@ export default function ChecklistPage() {
                   type="checkbox"
                   checked={item.done}
                   onChange={() => toggle(item)}
-                  disabled={!canEdit}
+                  disabled={!canEditItem(item)}
                   className="h-4 w-4 accent-sage disabled:cursor-not-allowed disabled:opacity-40"
                 />
               ) : (
                 <button
                   type="button"
                   onClick={() => toggle(item)}
-                  disabled={!canEdit}
+                  disabled={!canEditItem(item)}
                   aria-label={item.done ? "Mark task as not done" : "Mark task as done"}
                   className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] transition-opacity ${
                     item.done
                       ? "bg-sage text-white"
                       : "border border-line text-transparent"
-                  } ${!canEdit ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                  } ${!canEditItem(item) ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
                 >
                   ✓
                 </button>
@@ -326,6 +341,7 @@ export default function ChecklistPage() {
                   onClick={() => remove(item)}
                   aria-label="Delete"
                   className="text-muted transition-colors hover:text-red-600"
+                  disabled={!canEditItem(item)}
                 >
                   ✕
                 </button>

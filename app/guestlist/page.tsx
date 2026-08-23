@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import CanvaEmbed from "@/components/CanvaEmbed"
 import { site, type Guestlist } from "@/content/site"
 import { usePermissions } from "@/hooks/usePermissions"
@@ -163,8 +163,62 @@ function rowsToGuests(rows: string[][]): ImportedGuest[] {
 		.filter((g) => g.name)
 }
 
+/**
+ * Editable pax counter with natural typing behaviour:
+ * - clearing the field falls back to 0 (visible in the field)
+ * - typing digits updates the value live
+ * - never commits 0/negative while editing inline (blurs back to 1);
+ *   with `allowZero` (add form) a 0 is kept so submit can reject it.
+ */
+function PaxInput({
+	value,
+	onCommit,
+	className,
+	ariaLabel,
+	allowZero = false,
+}: {
+	value: number
+	onCommit: (pax: number) => void
+	className?: string
+	ariaLabel?: string
+	allowZero?: boolean
+}) {
+	// Draft holds the raw field text while it is invalid/being edited;
+	// null means "just show the committed value".
+	const [draft, setDraft] = useState<string | null>(null)
+	return (
+		<input
+			type="number"
+			min={1}
+			className={className}
+			aria-label={ariaLabel}
+			value={draft ?? String(value)}
+			onChange={(e) => {
+				const raw = e.target.value
+				const n = Math.round(Number(raw))
+				if (raw === "" || !Number.isFinite(n) || n < 1) {
+					// Cleared or zero/negative — show 0, only the add form keeps it.
+					if (allowZero) onCommit(0)
+					setDraft("0")
+					return
+				}
+				setDraft(null)
+				onCommit(n)
+			}}
+			onBlur={() => {
+				// Inline edits have no submit button to validate — an empty/
+				// zero draft snaps back to the safe default of 1.
+				if (!allowZero && draft !== null) {
+					setDraft(null)
+					onCommit(1)
+				}
+			}}
+		/>
+	)
+}
+
 export default function GuestlistPage() {
-	const { can } = usePermissions()
+	const { can, eventScope } = usePermissions()
 	const [guests, setGuests] = useState<Guest[]>([])
 	const [inviters, setInviters] = useState<GuestOption[]>([])
 	const [categories, setCategories] = useState<GuestOption[]>([])
@@ -174,6 +228,18 @@ export default function GuestlistPage() {
 	const [importing, setImporting] = useState(false)
 	const [importInfo, setImportInfo] = useState<string | null>(null)
 	const canEdit = can("edit_guests")
+	// Event-scoped editors may only touch guests of their own events;
+	// "general" — or no scope at all — means full access.
+	const canEditEvent = (ev: Guest["event"]) =>
+		!eventScope || eventScope.includes("general") || eventScope.includes(ev)
+	const canEditGuest = (g: Guest) => canEdit && canEditEvent(g.event)
+	// Option lists / CSV import affect every event — scoped editors only.
+	const canManageLists =
+		canEdit && (!eventScope || eventScope.includes("general"))
+
+	// Row editing — guests are edited through a form with an explicit Save.
+	const [editingId, setEditingId] = useState<string | null>(null)
+	const [draft, setDraft] = useState<Partial<Guest>>({})
 
 	// Filters
 	const [filterEvent, setFilterEvent] = useState<"semua" | Guest["event"]>("semua")
@@ -208,6 +274,15 @@ export default function GuestlistPage() {
 
 	// Canva reference embeds (live settings, falls back to defaults)
 	const [canva, setCanva] = useState<Guestlist[]>(site.guestlists)
+
+	// Keep the add-form event inside the editor's scope.
+	useEffect(() => {
+		if (canEdit && !canEditEvent(event)) {
+			const first = (Object.keys(EVENT_LABEL) as Guest["event"][]).find(canEditEvent)
+			if (first) setEvent(first)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [eventScope, canEdit])
 
 	const load = useCallback(async () => {
 		setLoading(true)
@@ -261,6 +336,10 @@ export default function GuestlistPage() {
 	const addGuest = async (e: React.FormEvent) => {
 		e.preventDefault()
 		if (!name.trim() || saving) return
+		if (pax < 1) {
+			setError("Pax must be at least 1 — how many seats does this guest need?")
+			return
+		}
 		// A category only makes sense together with the invitation that owns it.
 		if (category && !invitedBy) {
 			setError("Choose an invitation first — categories belong to an invitation.")
@@ -513,7 +592,57 @@ export default function GuestlistPage() {
 		}
 	}
 
-	// Import guest data exported from Canva as a CSV file. The Canva design
+	/** Open the edit form for a guest (nothing is sent until Save). */
+	const beginEdit = (g: Guest) => {
+		setEditingId(g._id)
+		setDraft({
+			name: g.name,
+			event: g.event,
+			side: g.side,
+			pax: g.pax,
+			phone: g.phone,
+			invitedBy: g.invitedBy,
+			category: g.category,
+			status: g.status,
+			note: g.note,
+		})
+	}
+
+	const cancelEdit = () => {
+		setEditingId(null)
+		setDraft({})
+	}
+
+	/** Save the edit form — validate, then send a single PATCH. */
+	const saveEdit = async () => {
+		if (!editingId) return
+		if (!draft.name?.trim()) {
+			setError("Guest name is required.")
+			return
+		}
+		if ((draft.pax ?? 1) < 1) {
+			setError("Pax must be at least 1 — how many seats does this guest need?")
+			return
+		}
+		if (draft.event && !canEditEvent(draft.event)) {
+			setError("You can only edit guests for your own events.")
+			return
+		}
+		await patchGuest(editingId, draft)
+		setEditingId(null)
+		setDraft({})
+	}
+
+	/** Delete with a confirmation prompt. */
+	const confirmDelete = (g: Guest) => {
+		if (
+			window.confirm(
+				`Delete ${g.name} (${EVENT_LABEL[g.event]} · ${g.pax} pax)?\n\nThis cannot be undone.`,
+			)
+		) {
+			removeGuest(g._id)
+		}
+	}
 	// stays the source of truth (shown below); this brings the same rows into
 	// the project so they render in the app's own table and are saved.
 	const importCsv = async (file: File) => {
@@ -663,6 +792,134 @@ export default function GuestlistPage() {
 		return Array.from(names).sort((a, b) => a.localeCompare(b))
 	}, [categories, guests])
 
+	/** Shared edit form rendered under a guest row while it is edited. */
+	const guestEditForm = () => (
+		<form
+			onSubmit={(e) => {
+				e.preventDefault()
+				saveEdit()
+			}}
+			className="grid grid-cols-2 gap-2 rounded-xl border border-sage/40 bg-cream/50 p-3 md:grid-cols-3 xl:grid-cols-4"
+		>
+			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Name</span>
+				<input
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
+					value={draft.name ?? ""}
+					onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+					required
+				/>
+			</label>
+			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Event</span>
+				<select
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
+					value={draft.event ?? "sanding"}
+					onChange={(e) => setDraft({ ...draft, event: e.target.value as Guest["event"] })}
+				>
+					{Object.entries(EVENT_LABEL)
+						.filter(([v]) => canEditEvent(v as Guest["event"]))
+						.map(([v, l]) => (
+							<option key={v} value={v}>{l}</option>
+						))}
+				</select>
+			</label>
+			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Side</span>
+				<select
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
+					value={draft.side ?? "groom"}
+					onChange={(e) => setDraft({ ...draft, side: e.target.value as Guest["side"] })}
+				>
+					{Object.entries(SIDE_LABEL).map(([v, l]) => (
+						<option key={v} value={v}>{l}</option>
+					))}
+				</select>
+			</label>
+			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Invited by</span>
+				<select
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
+					value={draft.invitedBy ?? ""}
+					onChange={(e) => setDraft({ ...draft, invitedBy: e.target.value, category: "" })}
+				>
+					<option value="">—</option>
+					{invitedByOptions.map((n) => (
+						<option key={n} value={n}>{n}</option>
+					))}
+				</select>
+			</label>
+			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Category</span>
+				<select
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage disabled:opacity-50"
+					value={draft.category ?? ""}
+					onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+					disabled={!draft.invitedBy}
+				>
+					<option value="">{draft.invitedBy ? "—" : "Pick invitation"}</option>
+					{categoriesFor(draft.invitedBy).map((n) => (
+						<option key={n} value={n}>{n}</option>
+					))}
+				</select>
+			</label>
+			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Pax</span>
+				<PaxInput
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
+					value={draft.pax ?? 1}
+					onCommit={(n) => setDraft({ ...draft, pax: n })}
+					allowZero
+				/>
+			</label>
+			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Phone</span>
+				<input
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
+					value={draft.phone ?? ""}
+					onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+					placeholder="Optional"
+				/>
+			</label>
+			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Status</span>
+				<select
+					className={`w-full rounded-lg border px-2 py-1.5 text-[12px] ${STATUS_META[draft.status ?? "dijemput"].cls}`}
+					value={draft.status ?? "dijemput"}
+					onChange={(e) => setDraft({ ...draft, status: e.target.value as Guest["status"] })}
+				>
+					{Object.entries(STATUS_META).map(([v, m]) => (
+						<option key={v} value={v}>{m.label}</option>
+					))}
+				</select>
+			</label>
+			<label className="col-span-2 block md:col-span-1">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Note</span>
+				<input
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
+					value={draft.note ?? ""}
+					onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+					placeholder="Optional"
+				/>
+			</label>
+			<div className="col-span-2 flex flex-wrap gap-2 md:col-span-3 xl:col-span-4">
+				<button
+					type="submit"
+					className="rounded-lg bg-sage px-5 py-2 text-[12px] uppercase tracking-[0.14em] text-white transition-opacity hover:opacity-90"
+				>
+					Save
+				</button>
+				<button
+					type="button"
+					onClick={cancelEdit}
+					className="rounded-lg border border-line bg-white px-5 py-2 text-[12px] uppercase tracking-[0.14em] text-muted transition-colors hover:text-ink"
+				>
+					Cancel
+				</button>
+			</div>
+		</form>
+	)
+
 	return (
 		<div className="mx-auto max-w-[1100px] px-5 pb-20 pt-24">
 			<header className="py-10 text-center">
@@ -672,7 +929,7 @@ export default function GuestlistPage() {
 				<h1 className="font-serif text-4xl text-ink">Our guests</h1>
 				<p className="mx-auto mt-3 max-w-[560px] text-[14px] leading-relaxed text-muted">
 					{canEdit
-						? "The guest list is saved — add, update attendance status, and delete directly from the table below. Guests belong to an invitation (e.g. Eiman, Abah) and each invitation owns its own categories (e.g. Eiman → BSN)."
+						? "The guest list is saved — use the edit ✎ and delete 🗑 buttons on each guest. Changes are only applied when you press Save. Guests belong to an invitation (e.g. Eiman, Abah) and each invitation owns its own categories (e.g. Eiman → BSN)."
 						: "The guest list for all our celebrations."}
 				</p>
 			</header>
@@ -700,9 +957,11 @@ export default function GuestlistPage() {
 					value={event}
 					onChange={(e) => setEvent(e.target.value as Guest["event"])}
 				>
-					<option value="nikah">💍 Nikah</option>
-					<option value="sanding">🌸 Sanding</option>
-					<option value="tandang">🏡 Tandang</option>
+					{Object.entries(EVENT_LABEL)
+						.filter(([v]) => canEditEvent(v as Guest["event"]))
+						.map(([v, l]) => (
+							<option key={v} value={v}>{l}</option>
+						))}
 				</select>
 				<select
 					className={inputCls}
@@ -744,13 +1003,12 @@ export default function GuestlistPage() {
 						</option>
 					))}
 				</select>
-				<input
+				<PaxInput
 					className={inputCls}
-					type="number"
-					min={1}
 					value={pax}
-					onChange={(e) => setPax(Number(e.target.value) || 1)}
-					aria-label="Pax"
+					onCommit={setPax}
+					allowZero
+					ariaLabel="Pax"
 				/>
 				<input
 					className={inputCls}
@@ -897,114 +1155,82 @@ export default function GuestlistPage() {
 							{search ? `No guests match “${search}”.` : "No guests yet — add your first guest above. 🌸"}
 						</li>
 					) : (
-						paged.map((g, i) => (
-							<li key={g._id} className="p-4">
-								<div className="flex items-start justify-between gap-3">
-									<div className="min-w-0">
-										<p className="font-serif text-[15px] leading-snug text-ink">
-											<span className="mr-1.5 text-[11px] text-muted">{rowNumber(i)}.</span>
-											{g.name}
-										</p>
-										{g.note && (
-											<p className="mt-0.5 text-[11px] text-muted">{g.note}</p>
+													paged.map((g, i) => {
+								const editable = canEditGuest(g)
+								const editing = editingId === g._id
+								return (
+									<li key={g._id} className="p-4">
+										<div className="flex items-start justify-between gap-3">
+											<div className="min-w-0">
+												<p className="font-serif text-[15px] leading-snug text-ink">
+													<span className="mr-1.5 text-[11px] text-muted">{rowNumber(i)}.</span>
+													{g.name}
+												</p>
+												{g.note && (
+													<p className="mt-0.5 text-[11px] text-muted">{g.note}</p>
+												)}
+											</div>
+											{editable && !editing && (
+												<div className="flex shrink-0 gap-1">
+													<button
+														type="button"
+														onClick={() => beginEdit(g)}
+														className="rounded-full p-1.5 text-[13px] text-muted transition-colors hover:bg-sage-soft hover:text-sage"
+														aria-label={`Edit ${g.name}`}
+														title="Edit guest"
+													>
+														✎
+													</button>
+													<button
+														type="button"
+														onClick={() => confirmDelete(g)}
+														className="rounded-full p-1.5 text-[13px] text-muted transition-colors hover:bg-[#FBEFEE] hover:text-[#A0524B]"
+														aria-label={`Delete ${g.name}`}
+														title="Delete guest"
+													>
+														🗑
+													</button>
+												</div>
+											)}
+										</div>
+										<div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
+											<label className="block">
+												<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Event</span>
+												<span className="text-[13px] text-muted">{EVENT_LABEL[g.event]}</span>
+											</label>
+											<label className="block">
+												<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Side</span>
+												<span className="text-[13px] text-muted">{SIDE_LABEL[g.side]}</span>
+											</label>
+											<label className="block">
+												<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Invited by</span>
+												<span className="text-[13px] text-muted">{g.invitedBy || "—"}</span>
+											</label>
+											<label className="block">
+												<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Category</span>
+												<span className="text-[13px] text-muted">{g.category || "—"}</span>
+											</label>
+											<label className="block">
+												<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Pax</span>
+												<span className="text-[13px] text-muted">{g.pax}</span>
+											</label>
+											<label className="block">
+												<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Phone</span>
+												<span className="text-[13px] text-muted">{g.phone || "—"}</span>
+											</label>
+											<label className="col-span-2 block">
+												<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Status</span>
+												<span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>
+											</label>
+										</div>
+										{editing && (
+											<div className="mt-3">
+												{guestEditForm()}
+											</div>
 										)}
-									</div>
-									{canEdit && <button
-										type="button"
-										onClick={() => removeGuest(g._id)}
-										className="shrink-0 rounded-full px-2 py-1 text-[12px] text-muted transition-colors hover:bg-[#FBEFEE] hover:text-[#A0524B]"
-										aria-label={`Delete ${g.name}`}
-									>
-										✕
-									</button>}
-								</div>
-								<div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
-									<label className="block">
-										<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Event</span>
-										{canEdit ? <select
-											className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
-											value={g.event}
-											onChange={(e) =>
-												patchGuest(g._id, { event: e.target.value as Guest["event"] })
-											}
-										>
-											{Object.entries(EVENT_LABEL).map(([v, l]) => (
-												<option key={v} value={v}>{l}</option>
-											))}
-										</select> : <span className="text-[13px] text-muted">{EVENT_LABEL[g.event]}</span>}
-									</label>
-									<label className="block">
-										<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Side</span>
-										{canEdit ? <select
-											className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
-											value={g.side}
-											onChange={(e) =>
-												patchGuest(g._id, { side: e.target.value as Guest["side"] })
-											}
-										>
-											{Object.entries(SIDE_LABEL).map(([v, l]) => (
-												<option key={v} value={v}>{l}</option>
-											))}
-										</select> : <span className="text-[13px] text-muted">{SIDE_LABEL[g.side]}</span>}
-									</label>
-									<label className="block">
-										<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Invited by</span>
-										{canEdit ? <select
-											className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
-											value={g.invitedBy ?? ""}
-											onChange={(e) => patchGuest(g._id, { invitedBy: e.target.value })}
-										>
-											<option value="">—</option>
-											{invitedByOptions.map((n) => (
-												<option key={n} value={n}>{n}</option>
-											))}
-										</select> : <span className="text-[13px] text-muted">{g.invitedBy || "—"}</span>}
-									</label>
-									<label className="block">
-										<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Category</span>
-										{canEdit ? <select
-											className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage disabled:opacity-50"
-											value={g.category ?? ""}
-											onChange={(e) => patchGuest(g._id, { category: e.target.value })}
-											disabled={!g.invitedBy}
-										>
-											<option value="">{g.invitedBy ? "—" : "Pick invitation"}</option>
-											{categoriesFor(g.invitedBy).map((n) => (
-												<option key={n} value={n}>{n}</option>
-											))}
-										</select> : <span className="text-[13px] text-muted">{g.category || "—"}</span>}
-									</label>
-									<label className="block">
-										<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Pax</span>
-										{canEdit ? <input
-											type="number"
-											min={1}
-											className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[13px] text-ink outline-none focus:border-sage"
-											value={g.pax}
-											onChange={(e) => patchGuest(g._id, { pax: Number(e.target.value) || 1 })}
-										/> : <span className="text-[13px] text-muted">{g.pax}</span>}
-									</label>
-									<label className="block">
-										<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Phone</span>
-										<span className="text-[13px] text-muted">{g.phone || "—"}</span>
-									</label>
-									<label className="col-span-2 block">
-										<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Status</span>
-										{canEdit ? <select
-											className={`w-full rounded-lg border px-2 py-1.5 text-[12px] ${STATUS_META[g.status].cls}`}
-											value={g.status}
-											onChange={(e) =>
-												patchGuest(g._id, { status: e.target.value as Guest["status"] })
-											}
-										>
-											{Object.entries(STATUS_META).map(([v, m]) => (
-												<option key={v} value={v}>{m.label}</option>
-											))}
-										</select> : <span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>}
-									</label>
-								</div>
-							</li>
-						))
+									</li>
+								)
+							})
 					)}
 				</ul>
 
@@ -1039,123 +1265,65 @@ export default function GuestlistPage() {
 									</td>
 								</tr>
 							) : (
-								paged.map((g, i) => (
-									<tr
-										key={g._id}
-										className="border-b border-line/60 transition-colors last:border-0 hover:bg-cream/60"
-									>
-										<td className="px-4 py-3 text-[12px] text-muted">{rowNumber(i)}</td>
-										<td className="px-4 py-3">
-											<span className="font-serif text-[15px] text-ink">{g.name}</span>
-											{g.note && (
-												<span className="block text-[11px] text-muted">{g.note}</span>
+																paged.map((g, i) => {
+									const editable = canEditGuest(g)
+									const editing = editingId === g._id
+									return (
+										<Fragment key={g._id}>
+											<tr
+												className="border-b border-line/60 transition-colors last:border-0 hover:bg-cream/60"
+											>
+												<td className="px-4 py-3 text-[12px] text-muted">{rowNumber(i)}</td>
+												<td className="px-4 py-3">
+													<span className="font-serif text-[15px] text-ink">{g.name}</span>
+													{g.note && (
+														<span className="block text-[11px] text-muted">{g.note}</span>
+													)}
+												</td>
+												<td className="px-4 py-3 text-[13px] text-muted">{EVENT_LABEL[g.event]}</td>
+												<td className="px-4 py-3 text-[13px] text-muted">{SIDE_LABEL[g.side]}</td>
+												<td className="px-4 py-3 text-[13px] text-muted">{g.invitedBy || "—"}</td>
+												<td className="px-4 py-3 text-[13px] text-muted">{g.category || "—"}</td>
+												<td className="px-4 py-3 text-[13px] text-muted">{g.pax}</td>
+												<td className="px-4 py-3 text-[13px] text-muted">{g.phone || "—"}</td>
+												<td className="px-4 py-3">
+													<span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>
+												</td>
+												<td className="px-4 py-3 text-right">
+													{editable && !editing && (
+														<div className="flex justify-end gap-1">
+															<button
+																type="button"
+																onClick={() => beginEdit(g)}
+																className="rounded-full p-1.5 text-[13px] text-muted transition-colors hover:bg-sage-soft hover:text-sage"
+																aria-label={`Edit ${g.name}`}
+																title="Edit guest"
+															>
+																✎
+															</button>
+															<button
+																type="button"
+																onClick={() => confirmDelete(g)}
+																className="rounded-full p-1.5 text-[13px] text-muted transition-colors hover:bg-[#FBEFEE] hover:text-[#A0524B]"
+																aria-label={`Delete ${g.name}`}
+																title="Delete guest"
+															>
+																🗑
+															</button>
+														</div>
+													)}
+												</td>
+											</tr>
+											{editing && (
+												<tr>
+													<td colSpan={10} className="px-4 pb-4">
+														{guestEditForm()}
+													</td>
+												</tr>
 											)}
-										</td>
-										<td className="px-4 py-3">
-											{canEdit ? <select
-												className="rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage"
-												value={g.event}
-												onChange={(e) =>
-													patchGuest(g._id, { event: e.target.value as Guest["event"] })
-												}
-											>
-												{Object.entries(EVENT_LABEL).map(([v, l]) => (
-													<option key={v} value={v}>
-														{l}
-													</option>
-												))}
-											</select> : <span className="text-[13px] text-muted">{EVENT_LABEL[g.event]}</span>}
-										</td>
-										<td className="px-4 py-3">
-											{canEdit ? <select
-												className="rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage"
-												value={g.side}
-												onChange={(e) =>
-													patchGuest(g._id, { side: e.target.value as Guest["side"] })
-												}
-											>
-												{Object.entries(SIDE_LABEL).map(([v, l]) => (
-													<option key={v} value={v}>
-														{l}
-													</option>
-												))}
-											</select> : <span className="text-[13px] text-muted">{SIDE_LABEL[g.side]}</span>}
-										</td>
-										<td className="px-4 py-3">
-											{canEdit ? <select
-												className="max-w-[150px] rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage"
-												value={g.invitedBy ?? ""}
-												onChange={(e) =>
-													patchGuest(g._id, { invitedBy: e.target.value })
-												}
-											>
-												<option value="">—</option>
-												{invitedByOptions.map((n) => (
-													<option key={n} value={n}>
-														{n}
-													</option>
-												))}
-											</select> : <span className="text-[13px] text-muted">{g.invitedBy || "—"}</span>}
-										</td>
-										<td className="px-4 py-3">
-											{canEdit ? <select
-												className="max-w-[130px] rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage disabled:opacity-50"
-												value={g.category ?? ""}
-												onChange={(e) =>
-													patchGuest(g._id, { category: e.target.value })
-												}
-												disabled={!g.invitedBy}
-												title={!g.invitedBy ? "Choose an invitation first" : undefined}
-											>
-												<option value="">{g.invitedBy ? "—" : "Pick invitation"}</option>
-												{categoriesFor(g.invitedBy).map((n) => (
-													<option key={n} value={n}>
-														{n}
-													</option>
-												))}
-											</select> : <span className="text-[13px] text-muted">{g.category || "—"}</span>}
-										</td>
-										<td className="px-4 py-3">
-											{canEdit ? <input
-												type="number"
-												min={1}
-												className="w-16 rounded-lg border border-transparent bg-transparent px-1 py-1 text-[13px] text-ink hover:border-line focus:border-sage"
-												value={g.pax}
-												onChange={(e) =>
-													patchGuest(g._id, { pax: Number(e.target.value) || 1 })
-												}
-											/> : <span className="text-[13px] text-muted">{g.pax}</span>}
-										</td>
-										<td className="px-4 py-3 text-[13px] text-muted">{g.phone || "—"}</td>
-										<td className="px-4 py-3">
-											{canEdit ? <select
-												className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}
-												value={g.status}
-												onChange={(e) =>
-													patchGuest(g._id, {
-														status: e.target.value as Guest["status"],
-													})
-												}
-											>
-												{Object.entries(STATUS_META).map(([v, m]) => (
-													<option key={v} value={v}>
-														{m.label}
-													</option>
-												))}
-											</select> : <span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>}
-										</td>
-										<td className="px-4 py-3 text-right">
-											{canEdit && <button
-												type="button"
-												onClick={() => removeGuest(g._id)}
-												className="rounded-full px-2 py-1 text-[12px] text-muted transition-colors hover:bg-[#FBEFEE] hover:text-[#A0524B]"
-												aria-label={`Delete ${g.name}`}
-											>
-												✕
-											</button>}
-										</td>
-									</tr>
-								))
+										</Fragment>
+									)
+								})
 							)}
 						</tbody>
 					</table>
@@ -1213,8 +1381,9 @@ export default function GuestlistPage() {
 
 			{/* Invited-by & category managers. Categories belong to an
 			    invitation (e.g. Eiman → BSN), so they are managed per
-			    invitation. */}
-			{canEdit && <section className="mt-10 grid gap-6 rounded-2xl border border-line bg-white p-5 md:grid-cols-2">
+			    invitation. Scoped editors don't manage these — they affect
+			    every event. */}
+			{canManageLists && <section className="mt-10 grid gap-6 rounded-2xl border border-line bg-white p-5 md:grid-cols-2">
 				{/* Invited-by manager */}
 				<div>
 					<h2 className="font-serif text-lg text-ink">
@@ -1481,8 +1650,9 @@ export default function GuestlistPage() {
 			</section>}
 
 			{/* Canva is the source of truth. Import its exported guest data (CSV)
-			    into the project so it renders in the table above and is saved. */}
-			{canEdit && <section className="mt-10 rounded-2xl border border-line bg-white p-5">
+			    into the project so it renders in the table above and is saved.
+			    Scoped editors can't import — rows may belong to any event. */}
+			{canManageLists && <section className="mt-10 rounded-2xl border border-line bg-white p-5">
 				<div className="flex flex-wrap items-start justify-between gap-4">
 					<div>
 						<h2 className="font-serif text-lg text-ink">
