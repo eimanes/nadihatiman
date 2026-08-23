@@ -934,40 +934,18 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ── BUDGET (GOOGLE SHEET) TAB ── */}
+      {/* ── BUDGET TAB ── */}
       {tab === "budget" && (
         <div className="rounded-2xl border border-line bg-white p-5">
           <h3 className="mb-4 text-[11px] uppercase tracking-[0.24em] text-muted">
-            Budget source — Google Spreadsheet
+            Budget — managed in-app
           </h3>
-          <label className={label}>
-            Google Spreadsheet URL
-            <input
-              className={input}
-              value={settings.budgetSheetUrl}
-              placeholder="Paste your sheet URL here…"
-              onChange={(e) =>
-                setSettings((s) =>
-                  s ? { ...s, budgetSheetUrl: e.target.value } : s,
-                )
-              }
-            />
-          </label>
-          <ul className="mt-4 list-disc space-y-1 pl-5 text-[12px] text-muted">
-            <li>
-              Share the sheet as <b>“Anyone with the link can view”</b> —
-              the Budget page only reads, it never changes your sheet.
-            </li>
-            <li>
-              The first row of the sheet must be the column headers. Supported
-              columns: Item · Event · Category · Estimated · Actual · Paid
-              (yes/no).
-            </li>
-            <li>
-              For a specific tab in the sheet, copy the URL containing that
-              tab's <code>gid=</code>.
-            </li>
-          </ul>
+          <p className="text-[13px] leading-relaxed text-muted">
+            The budget list is now stored in the app and seeded from your
+            Excel. Add, edit, and delete items directly on the{" "}
+            <a href="/budget" className="text-sage underline">Budget page</a>
+            {" "}— no Google Sheet needed.
+          </p>
         </div>
       )}
     </div>

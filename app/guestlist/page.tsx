@@ -640,15 +640,13 @@ export default function GuestlistPage() {
 		setDraft({})
 	}
 
-	/** Delete with a confirmation prompt. */
-	const confirmDelete = (g: Guest) => {
-		if (
-			window.confirm(
-				`Delete ${g.name} (${EVENT_LABEL[g.event]} · ${g.pax} pax)?\n\nThis cannot be undone.`,
-			)
-		) {
-			removeGuest(g._id)
-		}
+	// Delete confirmation popup
+	const [deletingGuest, setDeletingGuest] = useState<Guest | null>(null)
+
+	const confirmDeleteGuest = async () => {
+		if (!deletingGuest) return
+		removeGuest(deletingGuest._id)
+		setDeletingGuest(null)
 	}
 	// stays the source of truth (shown below); this brings the same rows into
 	// the project so they render in the app's own table and are saved.
@@ -1190,7 +1188,7 @@ export default function GuestlistPage() {
 													</button>
 													<button
 														type="button"
-														onClick={() => confirmDelete(g)}
+														onClick={() => setDeletingGuest(g)}
 														className="rounded-full p-1.5 text-[13px] text-muted transition-colors hover:bg-[#FBEFEE] hover:text-[#A0524B]"
 														aria-label={`Delete ${g.name}`}
 														title="Delete guest"
@@ -1310,7 +1308,7 @@ export default function GuestlistPage() {
 															</button>
 															<button
 																type="button"
-																onClick={() => confirmDelete(g)}
+																onClick={() => setDeletingGuest(g)}
 																className="rounded-full p-1.5 text-[13px] text-muted transition-colors hover:bg-[#FBEFEE] hover:text-[#A0524B]"
 																aria-label={`Delete ${g.name}`}
 																title="Delete guest"
@@ -1717,6 +1715,34 @@ export default function GuestlistPage() {
 					))}
 				</div>
 			</details>
+
+			{/* Delete guest confirmation popup */}
+			{deletingGuest && (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+					<div className="mx-4 w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-xl">
+						<h3 className="mb-2 font-serif text-lg text-ink">Delete guest?</h3>
+						<p className="mb-4 text-[13px] leading-relaxed text-muted">
+							{deletingGuest.name} ({EVENT_LABEL[deletingGuest.event]} · {deletingGuest.pax} pax) will be permanently removed.
+						</p>
+						<div className="flex gap-2">
+							<button
+								type="button"
+								onClick={confirmDeleteGuest}
+								className="flex-1 rounded-lg bg-[#A0524B] px-4 py-2 text-[12px] uppercase tracking-[0.14em] text-white transition-opacity hover:opacity-90"
+							>
+								Delete
+							</button>
+							<button
+								type="button"
+								onClick={() => setDeletingGuest(null)}
+								className="flex-1 rounded-lg border border-line bg-white px-4 py-2 text-[12px] uppercase tracking-[0.14em] text-muted transition-colors hover:text-ink"
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	)
 }

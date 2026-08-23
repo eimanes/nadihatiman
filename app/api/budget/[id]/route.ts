@@ -27,9 +27,13 @@ export async function PATCH(req: Request, { params }: Params) {
     if (typeof body.item === "string" && body.item.trim()) updates.item = body.item.trim()
     if (typeof body.event === "string") updates.event = body.event
     if (typeof body.category === "string") updates.category = body.category
+    if (typeof body.vendor === "string") updates.vendor = body.vendor
     if (body.estimated !== undefined) updates.estimated = Number(body.estimated) || 0
-    if (body.actual !== undefined) updates.actual = Number(body.actual) || 0
-    if (typeof body.paid === "boolean") updates.paid = body.paid
+    if (body.paid !== undefined) updates.paid = Number(body.paid) || 0
+    if (body.balance !== undefined) updates.balance = Number(body.balance) || 0
+    if (typeof body.date === "string") updates.date = body.date
+    if (typeof body.paidBy === "string") updates.paidBy = body.paidBy
+    if (typeof body.notes === "string") updates.notes = body.notes
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No changes." }, { status: 400 })
     }
