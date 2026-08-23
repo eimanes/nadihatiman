@@ -48,6 +48,7 @@ export async function PATCH(req: Request, { params }: Params) {
     if (typeof body.task === "string" && body.task.trim()) updates.task = body.task.trim()
     if (typeof body.event === "string") updates.event = body.event
     if (typeof body.category === "string") updates.category = body.category
+    if (typeof body.owner === "string") updates.owner = body.owner
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No changes." }, { status: 400 })
     }

@@ -26,6 +26,8 @@ type GuestOption = {
 	name: string
 	/** Categories only: the invitation (inviter) that owns this category. */
 	owner?: string
+	/** Inviters only: which side this invitation belongs to. */
+	side?: "bride" | "groom"
 	createdAt: string
 }
 
@@ -264,6 +266,7 @@ export default function GuestlistPage() {
 
 	// Inviter manager
 	const [newInviter, setNewInviter] = useState("")
+	const [newInviterSide, setNewInviterSide] = useState<"bride" | "groom">("groom")
 	const [editingInviterId, setEditingInviterId] = useState<string | null>(null)
 	const [editingInviterName, setEditingInviterName] = useState("")
 
@@ -370,14 +373,14 @@ export default function GuestlistPage() {
 	}
 
 	/** Add an "invited by" option (e.g. "Abah's invitation"). */
-	const addInviter = async (rawName: string) => {
+	const addInviter = async (rawName: string, side: "bride" | "groom" = "groom") => {
 		const trimmed = rawName.trim()
 		if (!trimmed) return
 		try {
 			const res = await fetch("/api/guest-inviters", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: trimmed, event }),
+				body: JSON.stringify({ name: trimmed, event, side }),
 			})
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Error adding inviter.")
@@ -764,18 +767,49 @@ export default function GuestlistPage() {
 		return items
 	}, [totalPages, safePage])
 
-	const totalPax = filtered.reduce((sum, g) => sum + (g.pax || 0), 0)
+	// Attending pax excludes guests marked "not attending" — their seats are
+	// released. totalPax = everyone still coming; declinedPax = seats freed up.
+	const declinedPax = filtered
+		.filter((g) => g.status === "tidak_hadir")
+		.reduce((sum, g) => sum + (g.pax || 0), 0)
+	const totalPax = filtered
+		.filter((g) => g.status !== "tidak_hadir")
+		.reduce((sum, g) => sum + (g.pax || 0), 0)
 	const confirmedPax = filtered
 		.filter((g) => g.status === "disahkan")
 		.reduce((sum, g) => sum + (g.pax || 0), 0)
 
 	// "Invited by" options = managed inviters + any value already on a guest
-	// (so legacy guests never lose their label in the dropdown).
+	// (so legacy guests never lose their label in the dropdown). When a side
+	// filter is active, only invitations belonging to that side are listed.
 	const invitedByOptions = useMemo(() => {
 		const names = new Set(inviters.map((i) => i.name))
 		for (const g of guests) if (g.invitedBy) names.add(g.invitedBy)
 		return Array.from(names).sort((a, b) => a.localeCompare(b))
 	}, [inviters, guests])
+
+	// Derive each invitation's side: the stored side on the inviter, else the
+	// side of its guests (an invitation like Abah's only ever hosts one side).
+	const inviterSide = useMemo(() => {
+		const map = new Map<string, "bride" | "groom">()
+		for (const i of inviters) if (i.side) map.set(i.name, i.side)
+		for (const g of guests) {
+			if (g.invitedBy && !map.has(g.invitedBy)) map.set(g.invitedBy, g.side)
+		}
+		return map
+	}, [inviters, guests])
+
+	// "Invited by" filter options scoped to the selected side.
+	const invitedByFilterOptions = useMemo(() => {
+		if (filterSide === "semua") return invitedByOptions
+		return invitedByOptions.filter((n) => inviterSide.get(n) === filterSide)
+	}, [filterSide, invitedByOptions, inviterSide])
+
+	// If the chosen invitation isn't on the selected side, reset it.
+	useEffect(() => {
+		if (filterInvitedBy === "semua") return
+		if (!invitedByFilterOptions.includes(filterInvitedBy)) setFilterInvitedBy("semua")
+	}, [filterSide, invitedByFilterOptions, filterInvitedBy])
 
 	// Category options work the same way, but are OWNED BY an invitation —
 	// "Eiman → BSN" only appears when the Eiman invitation is selected.
@@ -796,6 +830,20 @@ export default function GuestlistPage() {
 		for (const g of guests) if (g.category) names.add(g.category)
 		return Array.from(names).sort((a, b) => a.localeCompare(b))
 	}, [categories, guests])
+
+	// Category filter options depend on the selected invitation: when an
+	// invitation is chosen, only its owned categories are listed; otherwise
+	// every category is available.
+	const categoryFilterOptions = useMemo(
+		() => (filterInvitedBy === "semua" ? categoryOptions : categoriesFor(filterInvitedBy)),
+		[filterInvitedBy, categoryOptions, categoriesFor],
+	)
+
+	// If the chosen category isn't owned by the selected invitation, reset it.
+	useEffect(() => {
+		if (filterCategory === "semua") return
+		if (!categoryFilterOptions.includes(filterCategory)) setFilterCategory("semua")
+	}, [filterInvitedBy, categoryFilterOptions, filterCategory])
 
 	/** Shared edit form rendered under a guest row while it is edited. */
 	const guestEditForm = () => (
@@ -1067,19 +1115,23 @@ export default function GuestlistPage() {
 						onChange={(e) => setFilterInvitedBy(e.target.value)}
 					>
 						<option value="semua">All invitations</option>
-						{invitedByOptions.map((n) => (
+						{invitedByFilterOptions.map((n) => (
 							<option key={n} value={n}>
 								{n}
 							</option>
 						))}
 					</select>
 					<select
-						className={inputCls}
+						className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-50`}
 						value={filterCategory}
 						onChange={(e) => setFilterCategory(e.target.value)}
+						disabled={filterInvitedBy === "semua"}
+						title={filterInvitedBy === "semua" ? "Choose an invitation first" : undefined}
 					>
-						<option value="semua">All categories</option>
-						{categoryOptions.map((n) => (
+						<option value="semua">
+							{filterInvitedBy === "semua" ? "Pick invitation first" : "All categories"}
+						</option>
+						{categoryFilterOptions.map((n) => (
 							<option key={n} value={n}>
 								{n}
 							</option>
@@ -1097,6 +1149,11 @@ export default function GuestlistPage() {
 					<span className="rounded-full border border-sage/30 bg-sage-soft px-3 py-1.5 text-sage">
 						Confirmed: <b>{confirmedPax} pax</b>
 					</span>
+					{declinedPax > 0 && (
+						<span className="rounded-full border border-[#E4C5C2] bg-[#FBEFEE] px-3 py-1.5 text-[#A0524B]">
+							Not attending: <b>{declinedPax} pax</b>
+						</span>
+					)}
 					{/* Sort by name / invited by / category */}
 					<select
 						className={`${inputCls} py-1.5`}
@@ -1405,7 +1462,7 @@ export default function GuestlistPage() {
 						className="mt-4 flex gap-2"
 						onSubmit={(e) => {
 							e.preventDefault()
-							addInviter(newInviter)
+							addInviter(newInviter, newInviterSide)
 							setNewInviter("")
 						}}
 					>
@@ -1415,6 +1472,15 @@ export default function GuestlistPage() {
 							value={newInviter}
 							onChange={(e) => setNewInviter(e.target.value)}
 						/>
+						<select
+							className={inputCls}
+							value={newInviterSide}
+							onChange={(e) => setNewInviterSide(e.target.value as "bride" | "groom")}
+							title="Which side this invitation belongs to"
+						>
+							<option value="groom">Eiman's side</option>
+							<option value="bride">Nadia's side</option>
+						</select>
 						<button
 							type="submit"
 							disabled={!newInviter.trim()}
@@ -1477,6 +1543,16 @@ export default function GuestlistPage() {
 											</>
 										) : (
 											<>
+												<span
+													className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+														(inv.side ?? inviterSide.get(inv.name)) === "bride"
+															? "border-gold/40 bg-gold/10 text-gold"
+															: "border-sage/40 bg-sage-soft text-sage"
+													}`}
+													title="Which side this invitation belongs to"
+												>
+													{(inv.side ?? inviterSide.get(inv.name)) === "bride" ? "N" : "E"}
+												</span>
 												<span className="truncate">
 													{inv.name}
 													{count > 0 && (
@@ -1533,16 +1609,23 @@ export default function GuestlistPage() {
 							Add an invitation first (left) — then its categories appear here.
 						</p>
 					) : (
-						<div className="mt-4 space-y-4">
+						<div className="mt-4 space-y-2">
 							{inviters.map((inv) => {
 								const owned = categories.filter((c) => c.owner === inv.name)
 								return (
-									<div key={inv._id} className="rounded-xl border border-line bg-cream/40 p-3">
-										<p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-											{inv.name}
-										</p>
+									<details key={inv._id} className="group rounded-xl border border-line bg-cream/40">
+										<summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+											<span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+												<span className="text-[10px] transition-transform group-open:rotate-90">▸</span>
+												{inv.name}
+											</span>
+											<span className="rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted">
+												{owned.length} {owned.length === 1 ? "cat" : "cats"}
+											</span>
+										</summary>
+										<div className="border-t border-line/60 p-3">
 										<form
-											className="mt-2 flex gap-2"
+											className="flex gap-2"
 											onSubmit={(e) => {
 												e.preventDefault()
 												const input = e.currentTarget.elements.namedItem("cat") as HTMLInputElement
@@ -1646,7 +1729,8 @@ export default function GuestlistPage() {
 												})}
 											</ul>
 										)}
-									</div>
+										</div>
+									</details>
 								)
 							})}
 						</div>

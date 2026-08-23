@@ -6,8 +6,17 @@ import {
   requireSuperadmin,
   validGuestEventScope,
 } from "@/lib/permissions"
+import { isEmailConfigured, sendWelcomeEmail } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
+
+const PERMISSION_LABELS: Record<string, string> = {
+  edit_schedule: "Edit schedule",
+  edit_checklist: "Edit checklist",
+  edit_guests: "Edit guests",
+  view_budget: "View budget",
+  edit_budget: "Edit budget",
+}
 
 export async function GET() {
   const superadmin = await requireSuperadmin()
@@ -58,7 +67,7 @@ export async function POST(req: Request) {
       ? scope
       : null
   const db = await getDb()
-  await db.collection("account_permissions").updateOne(
+  const result = await db.collection("account_permissions").updateOne(
     { email },
     {
       $set: {
@@ -73,5 +82,23 @@ export async function POST(req: Request) {
     },
     { upsert: true },
   )
-  return NextResponse.json({ ok: true })
+
+  // Send the welcome email only for a brand-new account (not a re-save).
+  // Email failures never block the account from being created.
+  let emailSent = false
+  if (result.upsertedCount > 0 && isEmailConfigured()) {
+    try {
+      const access =
+        role === "superadmin"
+          ? "Full access (all modules)"
+          : permissions.length > 0
+            ? permissions.map((p: string) => PERMISSION_LABELS[p] ?? p).join(", ")
+            : "View only"
+      await sendWelcomeEmail({ email, access, role })
+      emailSent = true
+    } catch {
+      emailSent = false
+    }
+  }
+  return NextResponse.json({ ok: true, emailSent })
 }

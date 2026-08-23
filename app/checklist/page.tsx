@@ -10,6 +10,8 @@ type ChecklistItem = {
   task: string
   event: string
   category: string
+  /** Who owns this task: bride | groom | family | event. */
+  owner: string
   done: boolean
   createdAt: string
 }
@@ -21,6 +23,13 @@ const EVENT_OPTIONS = [
   { id: "tandang", label: "Tandang" },
 ]
 
+const OWNER_OPTIONS = [
+  { id: "bride", label: "👰 Bride" },
+  { id: "groom", label: "🤵 Groom" },
+  { id: "family", label: "👨‍👩‍👧 Family" },
+  { id: "event", label: "📅 Event" },
+]
+
 const CATEGORY_OPTIONS = [
   "Preparation",
   "Vendor",
@@ -30,21 +39,42 @@ const CATEGORY_OPTIONS = [
   "Other",
 ]
 
-const DEFAULT_ITEMS = [
-  { task: "Confirm date & hotel booking in Seremban (Eiman + groom assistant)", event: "nikah", category: "Logistics" },
-  { task: "Complete nikah documents & marriage course", event: "nikah", category: "Documents" },
-  { task: "Confirm the tok kadi & witnesses", event: "nikah", category: "Preparation" },
-  { task: "Fitting of white baju Melayu & white baju kurung", event: "nikah", category: "Attire" },
-  { task: "Confirm the catering for the reception after nikah", event: "nikah", category: "Vendor" },
-  { task: "Confirm the dais & decorations", event: "sanding", category: "Vendor" },
-  { task: "Fitting white dress & brown suit", event: "sanding", category: "Attire" },
-  { task: "Confirm the photographer & videographer", event: "sanding", category: "Vendor" },
-  { task: "Distribute the digital sanding invitation cards", event: "sanding", category: "Preparation" },
-  { task: "Confirm the tandang date", event: "tandang", category: "Preparation" },
-  { task: "Distribute the digital tandang invitation cards", event: "tandang", category: "Preparation" },
-  { task: "Confirm the tandang dress code", event: "tandang", category: "Attire" },
-  { task: "Update the guestlist in Canva", event: "umum", category: "Preparation" },
-  { task: "Prepare the doorgifts", event: "umum", category: "Preparation" },
+// Seeded from the wedding budget — each expense becomes a task, assigned to
+// an owner (bride/groom/family/event) based on the budget category & payer.
+const SEED_ITEMS = [
+  // Event — shared/logistics
+  { task: "Book the Wedding Hall (Le Rozza)", event: "sanding", owner: "event" },
+  { task: "Arrange Dulang Hantaran (Dulang Mimpi)", event: "sanding", owner: "event" },
+  { task: "Frame the Mas Kawin", event: "nikah", owner: "event" },
+  { task: "Book the Emcee (Emcee Redha)", event: "sanding", owner: "event" },
+  { task: "Order the Goodies", event: "sanding", owner: "event" },
+  { task: "Set up the Candy Wall", event: "sanding", owner: "event" },
+  { task: "Book Photo + Video (Heyypaan)", event: "sanding", owner: "event" },
+  { task: "Hang the Kain Rentang (Cahaya Cermin)", event: "sanding", owner: "event" },
+  { task: "Confirm Tok Kadi + Saksi", event: "nikah", owner: "event" },
+  { task: "Arrange Ice Cream, Cendol, Apam Balik & Mee stalls", event: "sanding", owner: "event" },
+  // Bride
+  { task: "Baju Nikah (Teruntum Putih)", event: "nikah", owner: "bride" },
+  { task: "Wedding Dress (Farrarahim Atelier)", event: "sanding", owner: "bride" },
+  { task: "Wedding Heels (My Ballerine)", event: "sanding", owner: "bride" },
+  { task: "Keepsake (Suhada Mohd)", event: "umum", owner: "bride" },
+  { task: "Digital & Physical Wedding Cards", event: "umum", owner: "bride" },
+  { task: "Book MUA + Hijabstylist (Nabilah)", event: "sanding", owner: "bride" },
+  { task: "Book the Hairstylist", event: "sanding", owner: "bride" },
+  { task: "Book the Henna Artist", event: "sanding", owner: "bride" },
+  { task: "Hand bouquet (Rimbun)", event: "sanding", owner: "bride" },
+  { task: "Manicure + Spa (mandi bunga)", event: "sanding", owner: "bride" },
+  { task: "2 Dinar Emas & Wedding Bracelet", event: "umum", owner: "bride" },
+  { task: "Wedding Ring (P)", event: "umum", owner: "bride" },
+  // Groom
+  { task: "Wedding Suit (ThePresidentKL)", event: "sanding", owner: "groom" },
+  { task: "Wedding Shoes (zeve)", event: "sanding", owner: "groom" },
+  { task: "Groom stylist - Nikah", event: "nikah", owner: "groom" },
+  { task: "Wedding Ring (L)", event: "umum", owner: "groom" },
+  { task: "Hotel - Lelaki (before nikah)", event: "nikah", owner: "groom" },
+  // Family
+  { task: "Hotel - Pengantin (before & after sanding)", event: "sanding", owner: "family" },
+  { task: "Coordinate family contributions & gifts", event: "umum", owner: "family" },
 ]
 
 export default function ChecklistPage() {
@@ -56,6 +86,7 @@ export default function ChecklistPage() {
   const [task, setTask] = useState("")
   const [event, setEvent] = useState("umum")
   const [category, setCategory] = useState("Preparation")
+  const [owner, setOwner] = useState("event")
   const [busy, setBusy] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const canEdit = can("edit_checklist")
@@ -105,7 +136,7 @@ export default function ChecklistPage() {
       const res = await fetch("/api/checklist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task, event, category }),
+        body: JSON.stringify({ task, event, category, owner }),
       })
       if (res.ok) {
         setTask("")
@@ -126,7 +157,7 @@ export default function ChecklistPage() {
       const res = await fetch("/api/checklist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: DEFAULT_ITEMS }),
+        body: JSON.stringify({ items: SEED_ITEMS }),
       })
       if (res.ok) await load()
     } finally {
@@ -160,6 +191,23 @@ export default function ChecklistPage() {
   const progress = filtered.length
     ? Math.round((doneCount / filtered.length) * 100)
     : 0
+
+  // Group items by owner (bride / groom / family / event) for structure.
+  const grouped = useMemo(() => {
+    const order = ["bride", "groom", "family", "event"]
+    const map = new Map<string, ChecklistItem[]>()
+    for (const o of order) map.set(o, [])
+    for (const it of filtered) {
+      const key = map.has(it.owner) ? it.owner : "event"
+      map.get(key)!.push(it)
+    }
+    return order
+      .map((o) => ({ owner: o, items: map.get(o) ?? [] }))
+      .filter((g) => g.items.length > 0)
+  }, [filtered])
+
+  const ownerMeta = (o: string) =>
+    OWNER_OPTIONS.find((x) => x.id === o) ?? { id: o, label: o }
 
   return (
     <div className="mx-auto max-w-[860px] px-5 pb-20 pt-24">
@@ -219,6 +267,17 @@ export default function ChecklistPage() {
           className="rounded-full border border-line bg-white px-3 py-2 text-[13px]"
         >
           {EVENT_OPTIONS.filter((o) => canEditEvent(o.id)).map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={owner}
+          onChange={(e) => setOwner(e.target.value)}
+          className="rounded-full border border-line bg-white px-3 py-2 text-[13px]"
+        >
+          {OWNER_OPTIONS.map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
@@ -294,61 +353,78 @@ export default function ChecklistPage() {
           )}
         </div>
       ) : (
-        <ul className="space-y-2">
-          {filtered.map((item) => (
-            <li
-              key={item._id}
-              className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3"
-            >
-              {editMode ? (
-                <input
-                  type="checkbox"
-                  checked={item.done}
-                  onChange={() => toggle(item)}
-                  disabled={!canEditItem(item)}
-                  className="h-4 w-4 accent-sage disabled:cursor-not-allowed disabled:opacity-40"
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => toggle(item)}
-                  disabled={!canEditItem(item)}
-                  aria-label={item.done ? "Mark task as not done" : "Mark task as done"}
-                  className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] transition-opacity ${
-                    item.done
-                      ? "bg-sage text-white"
-                      : "border border-line text-transparent"
-                  } ${!canEditItem(item) ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
-                >
-                  ✓
-                </button>
-              )}
-              <span
-                className={`flex-1 text-[14px] ${
-                  item.done ? "text-muted line-through" : "text-ink"
-                }`}
-              >
-                {item.task}
-              </span>
-              <span className="rounded-full bg-sage-soft px-2.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-sage">
-                {EVENT_OPTIONS.find((o) => o.id === item.event)?.label ?? item.event}
-              </span>
-              <span className="hidden rounded-full bg-cream px-2.5 py-0.5 text-[10px] text-muted sm:inline">
-                {item.category}
-              </span>
-              {editMode && (
-                <button
-                  onClick={() => remove(item)}
-                  aria-label="Delete"
-                  className="text-muted transition-colors hover:text-red-600"
-                  disabled={!canEditItem(item)}
-                >
-                  ✕
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-6">
+          {grouped.map((group) => {
+            const gDone = group.items.filter((i) => i.done).length
+            return (
+              <section key={group.owner}>
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="font-serif text-lg text-ink">
+                    {ownerMeta(group.owner).label}
+                  </h2>
+                  <span className="text-[11px] text-muted">
+                    {gDone}/{group.items.length}
+                  </span>
+                </div>
+                <ul className="space-y-2">
+                  {group.items.map((item) => (
+                    <li
+                      key={item._id}
+                      className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3"
+                    >
+                      {editMode ? (
+                        <input
+                          type="checkbox"
+                          checked={item.done}
+                          onChange={() => toggle(item)}
+                          disabled={!canEditItem(item)}
+                          className="h-4 w-4 accent-sage disabled:cursor-not-allowed disabled:opacity-40"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => toggle(item)}
+                          disabled={!canEditItem(item)}
+                          aria-label={item.done ? "Mark task as not done" : "Mark task as done"}
+                          className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] transition-opacity ${
+                            item.done
+                              ? "bg-sage text-white"
+                              : "border border-line text-transparent"
+                          } ${!canEditItem(item) ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                        >
+                          ✓
+                        </button>
+                      )}
+                      <span
+                        className={`flex-1 text-[14px] ${
+                          item.done ? "text-muted line-through" : "text-ink"
+                        }`}
+                      >
+                        {item.task}
+                      </span>
+                      <span className="rounded-full bg-sage-soft px-2.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-sage">
+                        {EVENT_OPTIONS.find((o) => o.id === item.event)?.label ?? item.event}
+                      </span>
+                      <span className="hidden rounded-full bg-cream px-2.5 py-0.5 text-[10px] text-muted sm:inline">
+                        {item.category}
+                      </span>
+                      {editMode && (
+                        <button
+                          onClick={() => remove(item)}
+                          aria-label="Delete"
+                          className="text-muted transition-colors hover:text-red-600"
+                          disabled={!canEditItem(item)}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+        </div>
       )}
     </div>
   )

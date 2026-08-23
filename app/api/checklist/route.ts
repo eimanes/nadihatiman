@@ -62,10 +62,11 @@ export async function POST(req: Request) {
       }
       const docs = body.items
         .filter((i: { task?: string }) => typeof i.task === "string" && i.task.trim())
-        .map((i: { task: string; event?: string; category?: string }) => ({
+        .map((i: { task: string; event?: string; category?: string; owner?: string }) => ({
           task: i.task.trim(),
           event: i.event || "umum",
           category: i.category || "Lain-lain",
+          owner: i.owner || "event",
           done: false,
           createdAt: new Date().toISOString(),
         }))
@@ -94,6 +95,7 @@ export async function POST(req: Request) {
       task,
       event: body.event || "umum",
       category: body.category || "Lain-lain",
+      owner: body.owner || "event",
       done: false,
       createdAt: new Date().toISOString(),
     }

@@ -153,6 +153,10 @@ export async function createOption(
 		}
 		const doc: Record<string, unknown> = { name, createdAt: new Date().toISOString() }
 		if (config.ownedByInviter) doc.owner = owner
+		// Inviters carry which side they belong to ("groom" | "bride").
+		if (config.guestField === "invitedBy") {
+			doc.side = body.side === "bride" ? "bride" : "groom"
+		}
 		const result = await db.collection(config.collection).insertOne(doc)
 		return NextResponse.json(
 			{ [config.itemKey]: { ...doc, _id: result.insertedId.toString() } },
