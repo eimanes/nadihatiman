@@ -36,7 +36,6 @@ export async function GET() {
     accounts: accounts.map((account) => ({ ...account, _id: account._id.toString() })),
     permissions: PERMISSIONS,
     guestEventScopes: GUEST_EVENT_SCOPES,
-    defaultSuperadmins: ["es.swimmer15@gmail.com", "eimansalleh.5@gmail.com", "eimansalleh.15@gmail.com", "nadiaazamiera99@gmail.com"],
   })}
 
 export async function POST(req: Request) {
@@ -67,6 +66,14 @@ export async function POST(req: Request) {
       ? scope
       : null
   const db = await getDb()
+  // Reject duplicates — the add form is for new accounts; edits go through PATCH.
+  const existing = await db.collection("account_permissions").findOne({ email })
+  if (existing) {
+    return NextResponse.json(
+      { error: `The account "${email}" already exists.` },
+      { status: 409 },
+    )
+  }
   const result = await db.collection("account_permissions").updateOne(
     { email },
     {

@@ -1,7 +1,7 @@
 {
 	"info": {
 		"name": "NADIhatIMAN Wedding Planner",
-		"description": "API collection for the NADIhatIMAN wedding planner app (Next.js + MongoDB + Clerk).\n\n## Authentication\nThe app uses Clerk. The API routes under `/api/*` read the Clerk session cookie, so in Postman you must send the same cookies a signed-in browser sends. Easiest way: sign in at {{baseUrl}}/sign-in, copy the `Cookie` request header value from your browser's DevTools (Network tab → any /api request), and paste it into the `authCookie` collection variable.\n\nPermissions:\n- `edit_guests` — guests + guest-inviters write endpoints\n- `edit_checklist` — checklist write endpoints\n- `edit_schedule` — settings, home-content, home-images\n- `edit_budget` — budget/settings sheet URL\n- superadmin — accounts + preparation\n\n## Guests\nGuest fields: `name`, `event` (nikah|sanding|tandang), `side` (bride|groom), `pax`, `phone`, `note`, `status` (dijemput|disahkan|tidak_hadir), `invitedBy` (free-text label of who invited them, e.g. \"Abah's invitation\"), `category` (free-text label of the guest's category, e.g. \"Family\", \"Friends\", \"VIP\").\n\n## Guest option lists (inviters & categories)\nInviters are the \"invited by\" options. Categories are OWNED BY an inviter (`categories.owner` stores the inviter's name) — e.g. \"Eiman → BSN\". Guests store the option's *name*, so:\n- PATCH (rename) cascades the new name to every guest using it.\n- DELETE unassigns guests that referenced it (field → \"\") but does NOT delete the guests.\n- Deleting an INVITER also deletes its owned categories (after unassigning them from guests).\n- Renaming an INVITER also renames the owner stored on its categories.",
+		"description": "API collection for the NADIhatIMAN wedding planner app (Next.js + MongoDB + Clerk).\n\n## Authentication\nThe app uses Clerk. The API routes under `/api/*` read the Clerk session cookie, so in Postman you must send the same cookies a signed-in browser sends. Easiest way: sign in at {{baseUrl}}/sign-in, copy the `Cookie` request header value from your browser's DevTools (Network tab → any /api request), and paste it into the `authCookie` collection variable.\n\nPermissions:\n- `edit_guests` — guests + guest-inviters write endpoints\n- `edit_checklist` — checklist write endpoints\n- `edit_schedule` — settings, home-content, home-images\n- `edit_budget` — budget (wedding + Home Meridin)\n- superadmin — accounts + preparation (stored in DB, not hardcoded)\n\n## Guests\nGuest fields: `name`, `event` (nikah|sanding|tandang), `side` (bride|groom), `pax`, `phone`, `note`, `status` (dijemput|disahkan|tidak_hadir), `invitedBy` (free-text label of who invited them, e.g. \"Abah's invitation\"), `category` (free-text label of the guest's category, e.g. \"Family\", \"Friends\", \"VIP\").\n\n## Guest option lists (inviters & categories)\nInviters are the \"invited by\" options. Categories are OWNED BY an inviter (`categories.owner` stores the inviter's name) — e.g. \"Eiman → BSN\". Guests store the option's *name*, so:\n- PATCH (rename) cascades the new name to every guest using it.\n- DELETE unassigns guests that referenced it (field → \"\") but does NOT delete the guests.\n- Deleting an INVITER also deletes its owned categories (after unassigning them from guests).\n- Renaming an INVITER also renames the owner stored on its categories.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -704,11 +704,11 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "accounts"]
 						},
-						"description": "Requires superadmin. Returns { accounts, permissions, guestEventScopes, defaultSuperadmins }. Each account includes eventScope (null = full access)."
+						"description": "Requires superadmin. Returns { accounts, permissions, guestEventScopes }. Each account includes eventScope (null = full access) and bootstrap (true for the original owner superadmins, who cannot be demoted/removed)."
 					}
 				},
 				{
-					"name": "Upsert account",
+					"name": "Create account",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -726,7 +726,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "accounts"]
 						},
-						"description": "Requires superadmin. Upserts by email. role: account|superadmin. permissions ⊆ [edit_schedule, edit_checklist, edit_guests, view_budget, edit_budget]. eventScope ⊆ [general, nikah, sanding, tandang] — limits the account's EDITING (schedule, checklist, guests, budget) to those events (general = all). Applies whenever any edit_* permission is granted. Leave it out / empty for full access."
+						"description": "Requires superadmin. Creates a NEW account (409 if the email already exists — use PATCH to edit). role: account|superadmin. permissions ⊆ [edit_schedule, edit_checklist, edit_guests, view_budget, edit_budget]. eventScope ⊆ [general, nikah, sanding, tandang] — limits the account's EDITING (schedule, checklist, guests, budget) to those events (general = all). Applies whenever any edit_* permission is granted. Leave it out / empty for full access. Sends a welcome email on success."
 					}
 				},
 				{
@@ -754,7 +754,7 @@
 								}
 							]
 						},
-						"description": "Requires superadmin. Default superadmins cannot be demoted or removed; the last superadmin cannot be removed."
+						"description": "Requires superadmin. Bootstrap (owner) superadmins cannot be demoted or removed; the last superadmin cannot be removed."
 					}
 				},
 				{

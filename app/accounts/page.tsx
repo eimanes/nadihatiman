@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { usePermissions } from "@/hooks/usePermissions"
 import {
-  DEFAULT_SUPERADMIN_EMAILS,
   GUEST_EVENT_SCOPES,
   PERMISSIONS,
   type AccountRecord,
@@ -37,6 +36,9 @@ export default function AccountsPage() {
   const [eventScope, setEventScope] = useState<GuestEventScope[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // Delete confirmation — the superadmin must type "confirm" to proceed.
+  const [deletingAccount, setDeletingAccount] = useState<Account | null>(null)
+  const [confirmText, setConfirmText] = useState("")
 
   const load = useCallback(async () => {
     const response = await fetch("/api/accounts", { cache: "no-store" })
@@ -75,12 +77,19 @@ export default function AccountsPage() {
   const addAccount = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!email.trim() || saving) return
+    const normalized = email.trim().toLowerCase()
+    // Client-side duplicate check (DB emails are stored lowercase).
+    if (accounts.some((a) => a.email.toLowerCase() === normalized)) {
+      setError(`The account "${normalized}" already exists.`)
+      return
+    }
     setSaving(true)
+    setError(null)
     try {
       const response = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, permissions: selected, role, eventScope: scopeFor(selected, eventScope) }),
+        body: JSON.stringify({ email: normalized, permissions: selected, role, eventScope: scopeFor(selected, eventScope) }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error ?? "Could not save account.")
@@ -116,7 +125,11 @@ export default function AccountsPage() {
     }
   }
 
-  const removeAccount = async (account: Account) => {
+  const confirmRemove = async () => {
+    const account = deletingAccount
+    if (!account || confirmText.trim().toLowerCase() !== "confirm") return
+    setDeletingAccount(null)
+    setConfirmText("")
     setAccounts((current) => current.filter((item) => item._id !== account._id))
     const response = await fetch(`/api/accounts/${account._id}`, { method: "DELETE" })
     if (!response.ok) {
@@ -145,14 +158,35 @@ export default function AccountsPage() {
       <section className="mb-8 rounded-2xl border border-gold/50 bg-[#FBF6EC] p-5">
         <h2 className="font-serif text-lg text-ink">Superadmins</h2>
         <p className="mt-1 text-[12px] text-muted">
-          These accounts have permanent full access and cannot be changed here.
+          These accounts have permanent full access. Default owners cannot be changed; managed superadmins can be demoted or removed.
         </p>
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-          {DEFAULT_SUPERADMIN_EMAILS.map((email) => <li key={email} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-[13px] text-ink"><span>{email}</span><span className="text-[10px] uppercase tracking-[0.12em] text-gold">Owner · full access</span></li>)}
           {accounts.filter((account) => account.role === "superadmin").map((account) => (
-            <li key={account._id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-[13px] text-ink">
-              <span>{account.email}</span>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-gold">Full access</span>
+            <li key={account._id} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-[13px] text-ink">
+              <span className="min-w-0 truncate">{account.email}</span>
+              {account.bootstrap ? (
+                <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-gold">Owner · full access</span>
+              ) : (
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.12em] text-gold">Full access</span>
+                  <button
+                    type="button"
+                    onClick={() => updateAccount(account, { role: "account" })}
+                    className="text-[11px] text-muted transition-colors hover:text-sage"
+                    title="Demote to a regular account"
+                  >
+                    Demote
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setDeletingAccount(account); setConfirmText("") }}
+                    className="text-[11px] text-muted transition-colors hover:text-red-600"
+                    title="Remove account"
+                  >
+                    Remove
+                  </button>
+                </span>
+              )}
             </li>
           ))}
         </ul>
@@ -207,7 +241,7 @@ export default function AccountsPage() {
           <section key={account._id} className="rounded-2xl border border-line bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-serif text-lg text-ink">{account.email}</h2>
-              <button onClick={() => removeAccount(account)} className="text-[12px] text-muted hover:text-red-600">Remove</button>
+              <button onClick={() => { setDeletingAccount(account); setConfirmText("") }} className="text-[12px] text-muted hover:text-red-600">Remove</button>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {PERMISSIONS.map((permission) => (
@@ -255,6 +289,47 @@ export default function AccountsPage() {
           </section>
         ))}
       </div>
+
+      {/* Delete confirmation — superadmin must type "confirm" to proceed. */}
+      {deletingAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="mx-4 w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-xl">
+            <h3 className="mb-2 font-serif text-lg text-ink">Remove account?</h3>
+            <p className="mb-4 text-[13px] leading-relaxed text-muted">
+              <b className="text-ink">{deletingAccount.email}</b>
+              {deletingAccount.role === "superadmin" ? " (superadmin)" : ""} will lose all access. This cannot be undone.
+            </p>
+            <p className="mb-2 text-[12px] text-muted">
+              Type <b className="text-ink">confirm</b> to proceed:
+            </p>
+            <input
+              autoFocus
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmRemove() }}
+              placeholder="confirm"
+              className="mb-4 w-full rounded-lg border border-line bg-cream px-3 py-2 text-[13px] text-ink outline-none focus:border-[#A0524B]"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={confirmRemove}
+                disabled={confirmText.trim().toLowerCase() !== "confirm"}
+                className="flex-1 rounded-lg bg-[#A0524B] px-4 py-2 text-[12px] uppercase tracking-[0.14em] text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                Remove
+              </button>
+              <button
+                type="button"
+                onClick={() => { setDeletingAccount(null); setConfirmText("") }}
+                className="flex-1 rounded-lg border border-line bg-white px-4 py-2 text-[12px] uppercase tracking-[0.14em] text-muted transition-colors hover:text-ink"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

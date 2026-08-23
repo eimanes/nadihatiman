@@ -23,6 +23,11 @@ export type AccountRecord = {
    * every edit permission (schedule, checklist, guests, budget).
    */
   eventScope?: GuestEventScope[]
+  /**
+   * Bootstrap superadmins (the original owners) are seeded into the DB with
+   * this flag — they cannot be demoted or removed from the Accounts page.
+   */
+  bootstrap?: boolean
 }
 
 export type ViewerPermissions = {
@@ -44,10 +49,3 @@ export const validGuestEventScope = (value: unknown): GuestEventScope[] =>
         GUEST_EVENT_SCOPES.includes(scope as GuestEventScope),
       )
     : []
-
-export const DEFAULT_SUPERADMIN_EMAILS = [
-  "es.swimmer15@gmail.com",
-  "eimansalleh.5@gmail.com",
-  "eimansalleh.15@gmail.com",
-  "nadiaazamiera99@gmail.com",
-] as const

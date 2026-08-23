@@ -193,7 +193,9 @@ export default function BudgetPage() {
 	const totalEstimated = sorted.reduce((s, it) => s + it.estimated, 0)
 	const totalPaid = sorted.reduce((s, it) => s + it.paid, 0)
 	const totalBalance = sorted.reduce((s, it) => s + it.balance, 0)
-	const paidCount = sorted.filter((it) => it.balance <= 0 && it.estimated > 0).length
+	// Fully paid = nothing left to pay. A zero/empty balance counts even when
+	// the item costs RM0 (e.g. sponsored or DIY items are "settled" by default).
+	const paidCount = sorted.filter((it) => it.balance <= 0).length
 
 	// Home Meridin sorting & totals
 	const homeSorted = useMemo(() => {
@@ -210,7 +212,8 @@ export default function BudgetPage() {
 	const homeTotalPrice = homeSorted.reduce((s, it) => s + it.totalPrice, 0)
 	const homeTotalPaid = homeSorted.reduce((s, it) => s + it.paid, 0)
 	const homeTotalBalance = homeSorted.reduce((s, it) => s + it.balance, 0)
-	const homePaidCount = homeSorted.filter((it) => it.balance <= 0 && it.totalPrice > 0).length
+	// Same rule as the wedding budget: balance of 0 = fully paid, RM0 or not.
+	const homePaidCount = homeSorted.filter((it) => it.balance <= 0).length
 
 	const toggleHomeSort = (key: string) => {
 		if (homeSortKey !== key) {

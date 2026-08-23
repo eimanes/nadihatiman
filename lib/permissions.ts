@@ -1,7 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { getDb, isMongoConfigured } from "@/lib/mongodb"
 import {
-  DEFAULT_SUPERADMIN_EMAILS,
   GUEST_EVENT_SCOPES,
   PERMISSIONS,
   validGuestEventScope,
@@ -11,7 +10,6 @@ import {
 } from "@/lib/permission-types"
 
 export {
-  DEFAULT_SUPERADMIN_EMAILS,
   GUEST_EVENT_SCOPES,
   PERMISSIONS,
   validGuestEventScope,
@@ -40,14 +38,12 @@ export async function getViewerPermissions(): Promise<ViewerPermissions> {
   if (!email) {
     return { signedIn: true, email: null, isSuperadmin: false, permissions: [], eventScope: null }
   }
-  if (DEFAULT_SUPERADMIN_EMAILS.includes(email as (typeof DEFAULT_SUPERADMIN_EMAILS)[number])) {
-    return { signedIn: true, email, isSuperadmin: true, permissions: ALL_PERMISSIONS, eventScope: null }
-  }
   if (!isMongoConfigured()) {
     return { signedIn: true, email, isSuperadmin: false, permissions: [], eventScope: null }
   }
 
   const db = await getDb()
+  // Superadmin status comes from the DB (bootstrap accounts are seeded there).
   const account = await db.collection("account_permissions").findOne({ email })
   if (account?.role === "superadmin") {
     return { signedIn: true, email, isSuperadmin: true, permissions: ALL_PERMISSIONS, eventScope: null }
