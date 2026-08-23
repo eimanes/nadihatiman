@@ -241,7 +241,7 @@ export default function GuestlistPage() {
 	const [draft, setDraft] = useState<Partial<Guest>>({})
 
 	// Filters
-	const [filterEvent, setFilterEvent] = useState<"semua" | Guest["event"]>("semua")
+	const [filterEvent, setFilterEvent] = useState<Guest["event"]>("nikah")
 	const [filterSide, setFilterSide] = useState<"semua" | Guest["side"]>("semua")
 	const [filterInvitedBy, setFilterInvitedBy] = useState<string>("semua")
 	const [filterCategory, setFilterCategory] = useState<string>("semua")
@@ -707,7 +707,7 @@ export default function GuestlistPage() {
 		const q = search.trim().toLowerCase()
 		return guests.filter(
 			(g) =>
-				(filterEvent === "semua" || g.event === filterEvent) &&
+				g.event === filterEvent &&
 				(filterSide === "semua" || g.side === filterSide) &&
 				(filterInvitedBy === "semua" || g.invitedBy === filterInvitedBy) &&
 				(filterCategory === "semua" || g.category === filterCategory) &&
@@ -1079,128 +1079,139 @@ export default function GuestlistPage() {
 			</form>}
 
 			{/* Filters + stats */}
-			<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+			<div className="mb-4 space-y-3">
+				{/* Event buttons */}
 				<div className="flex flex-wrap gap-2">
-					{/* Search — matches name, phone, note, invitation, category */}
-					<input
-						className={`${inputCls} min-w-[180px] flex-1 md:flex-none md:w-56`}
-						type="search"
-						placeholder="🔍 Search guests…"
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-						aria-label="Search guests"
-					/>
-					<select
-						className={inputCls}
-						value={filterEvent}
-						onChange={(e) => setFilterEvent(e.target.value as typeof filterEvent)}
-					>
-						<option value="semua">All events</option>
-						<option value="nikah">💍 Nikah</option>
-						<option value="sanding">🌸 Sanding</option>
-						<option value="tandang">🏡 Tandang</option>
-					</select>
-					<select
-						className={inputCls}
-						value={filterSide}
-						onChange={(e) => setFilterSide(e.target.value as typeof filterSide)}
-					>
-						<option value="semua">Both sides</option>
-						<option value="groom">Eiman's side</option>
-						<option value="bride">Nadia's side</option>
-					</select>
-					<select
-						className={inputCls}
-						value={filterInvitedBy}
-						onChange={(e) => setFilterInvitedBy(e.target.value)}
-					>
-						<option value="semua">All invitations</option>
-						{invitedByFilterOptions.map((n) => (
-							<option key={n} value={n}>
-								{n}
-							</option>
-						))}
-					</select>
-					<select
-						className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-50`}
-						value={filterCategory}
-						onChange={(e) => setFilterCategory(e.target.value)}
-						disabled={filterInvitedBy === "semua"}
-						title={filterInvitedBy === "semua" ? "Choose an invitation first" : undefined}
-					>
-						<option value="semua">
-							{filterInvitedBy === "semua" ? "Pick invitation first" : "All categories"}
-						</option>
-						{categoryFilterOptions.map((n) => (
-							<option key={n} value={n}>
-								{n}
-							</option>
-						))}
-					</select>
-				</div>
-				<div className="flex flex-wrap items-center gap-2 text-[12px]">
-					<span className="rounded-full border border-line bg-white px-3 py-1.5 text-muted">
-						{totalCount} guest group{totalCount === 1 ? "" : "s"}
-						{search && <span className="text-muted/70"> found</span>}
-					</span>
-					<span className="rounded-full border border-line bg-white px-3 py-1.5 text-muted">
-						Total pax: <b className="text-ink">{totalPax}</b>
-					</span>
-					<span className="rounded-full border border-sage/30 bg-sage-soft px-3 py-1.5 text-sage">
-						Confirmed: <b>{confirmedPax} pax</b>
-					</span>
-					{declinedPax > 0 && (
-						<span className="rounded-full border border-[#E4C5C2] bg-[#FBEFEE] px-3 py-1.5 text-[#A0524B]">
-							Not attending: <b>{declinedPax} pax</b>
-						</span>
-					)}
-					{/* Sort by name / invited by / category */}
-					<select
-						className={`${inputCls} py-1.5`}
-						value={sortBy}
-						onChange={(e) => {
-							const v = e.target.value as typeof sortBy
-							// Re-selecting the active column flips the direction.
-							if (v === sortBy && v !== "default") {
-								setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-							} else {
-								setSortBy(v)
-								setSortDir("asc")
-							}
-						}}
-						aria-label="Sort by"
-					>
-						<option value="default">Sort: default</option>
-						<option value="name">Sort: name</option>
-						<option value="invitedBy">Sort: invited by</option>
-						<option value="category">Sort: category</option>
-					</select>
-					{sortBy !== "default" && (
+					{(Object.entries(EVENT_LABEL) as [Guest["event"], string][]).map(([ev, label]) => (
 						<button
+							key={ev}
 							type="button"
-							className="rounded-full border border-line bg-white px-2.5 py-1.5 text-[11px] text-muted transition-colors hover:text-ink"
-							onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-							aria-label={`Sort ${sortDir === "asc" ? "descending" : "ascending"}`}
-							title={sortDir === "asc" ? "Ascending ↑ — click for descending" : "Descending ↓ — click for ascending"}
+							onClick={() => setFilterEvent(ev)}
+							className={`rounded-lg border px-5 py-2 text-[12px] uppercase tracking-[0.14em] transition-all ${
+								filterEvent === ev
+									? "border-sage bg-sage text-white shadow-sm"
+									: "border-line bg-white text-muted hover:border-sage/40 hover:text-ink"
+							}`}
 						>
-							{sortDir === "asc" ? "↑ A–Z" : "↓ Z–A"}
+							{label}
 						</button>
-					)}
-					{/* Rows per page */}
-					<select
-						className={`${inputCls} py-1.5`}
-						value={String(pageSize)}
-						onChange={(e) =>
-							setPageSize(e.target.value === "all" ? "all" : (Number(e.target.value) as 10 | 20 | 50 | 100))
-						}
-						aria-label="Rows per page"
-					>
-						<option value="10">10 / page</option>
-						<option value="20">20 / page</option>
-						<option value="50">50 / page</option>
-						<option value="100">100 / page</option>
-						<option value="all">Show all</option>
-					</select>
+					))}
+				</div>
+
+				{/* Other filters + stats */}
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<div className="flex flex-wrap gap-2">
+						{/* Search — matches name, phone, note, invitation, category */}
+						<input
+							className={`${inputCls} min-w-[180px] flex-1 md:flex-none md:w-56`}
+							type="search"
+							placeholder="🔍 Search guests…"
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							aria-label="Search guests"
+						/>
+						<select
+							className={inputCls}
+							value={filterSide}
+							onChange={(e) => setFilterSide(e.target.value as typeof filterSide)}
+						>
+							<option value="semua">Both sides</option>
+							<option value="groom">Eiman's side</option>
+							<option value="bride">Nadia's side</option>
+						</select>
+						<select
+							className={inputCls}
+							value={filterInvitedBy}
+							onChange={(e) => setFilterInvitedBy(e.target.value)}
+						>
+							<option value="semua">All invitations</option>
+							{invitedByFilterOptions.map((n) => (
+								<option key={n} value={n}>
+									{n}
+								</option>
+							))}
+						</select>
+						<select
+							className={`${inputCls} disabled:cursor-not-allowed disabled:opacity-50`}
+							value={filterCategory}
+							onChange={(e) => setFilterCategory(e.target.value)}
+							disabled={filterInvitedBy === "semua"}
+							title={filterInvitedBy === "semua" ? "Choose an invitation first" : undefined}
+						>
+							<option value="semua">
+								{filterInvitedBy === "semua" ? "Pick invitation first" : "All categories"}
+							</option>
+							{categoryFilterOptions.map((n) => (
+								<option key={n} value={n}>
+									{n}
+								</option>
+							))}
+						</select>
+					</div>
+					<div className="flex flex-wrap items-center gap-2 text-[12px]">
+						<span className="rounded-full border border-line bg-white px-3 py-1.5 text-muted">
+							{totalCount} guest group{totalCount === 1 ? "" : "s"}
+							{search && <span className="text-muted/70"> found</span>}
+						</span>
+						<span className="rounded-full border border-line bg-white px-3 py-1.5 text-muted">
+							Total pax: <b className="text-ink">{totalPax}</b>
+						</span>
+						<span className="rounded-full border border-sage/30 bg-sage-soft px-3 py-1.5 text-sage">
+							Confirmed: <b>{confirmedPax} pax</b>
+						</span>
+						{declinedPax > 0 && (
+							<span className="rounded-full border border-[#E4C5C2] bg-[#FBEFEE] px-3 py-1.5 text-[#A0524B]">
+								Not attending: <b>{declinedPax} pax</b>
+							</span>
+						)}
+						{/* Sort by name / invited by / category */}
+						<select
+							className={`${inputCls} py-1.5`}
+							value={sortBy}
+							onChange={(e) => {
+								const v = e.target.value as typeof sortBy
+								// Re-selecting the active column flips the direction.
+								if (v === sortBy && v !== "default") {
+									setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+								} else {
+									setSortBy(v)
+									setSortDir("asc")
+								}
+							}}
+							aria-label="Sort by"
+						>
+							<option value="default">Sort: default</option>
+							<option value="name">Sort: name</option>
+							<option value="invitedBy">Sort: invited by</option>
+							<option value="category">Sort: category</option>
+						</select>
+						{sortBy !== "default" && (
+							<button
+								type="button"
+								className="rounded-full border border-line bg-white px-2.5 py-1.5 text-[11px] text-muted transition-colors hover:text-ink"
+								onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+								aria-label={`Sort ${sortDir === "asc" ? "descending" : "ascending"}`}
+								title={sortDir === "asc" ? "Ascending ↑ — click for descending" : "Descending ↓ — click for ascending"}
+							>
+								{sortDir === "asc" ? "↑ A–Z" : "↓ Z–A"}
+							</button>
+						)}
+						{/* Rows per page */}
+						<select
+							className={`${inputCls} py-1.5`}
+							value={String(pageSize)}
+							onChange={(e) =>
+								setPageSize(e.target.value === "all" ? "all" : (Number(e.target.value) as 10 | 20 | 50 | 100))
+							}
+							aria-label="Rows per page"
+						>
+							<option value="10">10 / page</option>
+							<option value="20">20 / page</option>
+							<option value="50">50 / page</option>
+							<option value="100">100 / page</option>
+							<option value="all">Show all</option>
+						</select>
+					</div>
 				</div>
 			</div>
 
