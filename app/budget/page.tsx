@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { usePermissions } from "@/hooks/usePermissions"
+import ExportButtons from "@/components/ExportButtons"
 
 type BudgetRow = {
 	_id: string
@@ -564,6 +565,10 @@ export default function BudgetPage() {
 					>
 						{loading ? "Loading…" : "↻ Reload"}
 					</button>
+					<ExportButtons
+						rows={sorted.map(({ _id, ...item }) => item)}
+						filename={`budget-${activeEvent}`}
+					/>
 				</div>
 				{updatedAt && !loading && (
 					<span className="text-[11px] text-muted">
@@ -894,6 +899,13 @@ export default function BudgetPage() {
 							</button>
 						</form>
 					)}
+
+					<div className="mb-4 flex justify-end">
+						<ExportButtons
+							rows={homeSorted.map(({ _id, ...item }) => item)}
+							filename="budget-home-meridin"
+						/>
+					</div>
 
 					{/* Home totals */}
 					<div className="mb-4 grid gap-3 sm:grid-cols-4">

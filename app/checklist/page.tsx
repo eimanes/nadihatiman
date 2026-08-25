@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Reveal from "@/components/Reveal"
+import ExportButtons from "@/components/ExportButtons"
 import { usePermissions } from "@/hooks/usePermissions"
 import type { GuestEventScope } from "@/lib/permission-types"
 
@@ -321,6 +322,13 @@ export default function ChecklistPage() {
             </button>
           ))}
         </div>
+        <ExportButtons
+          rows={filtered.map(({ _id, createdAt, ...item }) => ({
+            ...item,
+            done: item.done ? "Done" : "Not done",
+          }))}
+          filename={`checklist-${filter}`}
+        />
         <span className="text-[12px] text-muted">
           {doneCount}/{filtered.length} done · {progress}%
         </span>

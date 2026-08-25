@@ -12,6 +12,7 @@ const NOT_CONFIGURED = {
 const EVENTS = ["nikah", "sanding", "tandang"]
 const SIDES = ["bride", "groom"]
 const STATUSES = ["dijemput", "disahkan", "tidak_hadir"]
+const INVITATION_STATUSES = ["not_invited", "invited"]
 
 export async function GET() {
 	if (!isMongoConfigured()) {
@@ -79,6 +80,9 @@ export async function POST(req: Request) {
 					pax: Math.max(1, Math.round(Number(g.pax) || 1)),
 					phone: typeof g.phone === "string" ? g.phone.trim() : "",
 					note: typeof g.note === "string" ? g.note.trim() : "",
+					invitationStatus: INVITATION_STATUSES.includes(g.invitationStatus as string)
+						? g.invitationStatus
+						: "invited",
 					status: STATUSES.includes(g.status as string)
 						? g.status
 						: "dijemput",
@@ -121,6 +125,9 @@ export async function POST(req: Request) {
 			pax: Math.max(1, Math.round(Number(body.pax) || 1)),
 			phone: typeof body.phone === "string" ? body.phone.trim() : "",
 			note: typeof body.note === "string" ? body.note.trim() : "",
+			invitationStatus: INVITATION_STATUSES.includes(body.invitationStatus)
+				? body.invitationStatus
+				: "invited",
 			status: STATUSES.includes(body.status) ? body.status : "dijemput",
 			invitedBy:
 				typeof body.invitedBy === "string" ? body.invitedBy.trim() : "",

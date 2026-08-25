@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import CanvaEmbed from "@/components/CanvaEmbed"
+import ExportButtons from "@/components/ExportButtons"
 import { site, type Guestlist } from "@/content/site"
 import { usePermissions } from "@/hooks/usePermissions"
 
@@ -13,6 +14,7 @@ type Guest = {
 	pax: number
 	phone: string
 	note: string
+	invitationStatus: "not_invited" | "invited"
 	status: "dijemput" | "disahkan" | "tidak_hadir"
 	/** Which invitation this guest belongs to, e.g. "Abah's invitation" */
 	invitedBy: string
@@ -51,6 +53,11 @@ const STATUS_META: Record<Guest["status"], { label: string; cls: string }> = {
 	},
 }
 
+const INVITATION_STATUS_META: Record<Guest["invitationStatus"], { label: string; cls: string }> = {
+	invited: { label: "Invited", cls: "bg-sage-soft text-sage border-sage/30" },
+	not_invited: { label: "Not invited", cls: "bg-cream text-muted border-line" },
+}
+
 const inputCls =
 	"rounded-lg border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-sage"
 
@@ -61,6 +68,7 @@ type ImportedGuest = {
 	pax: number
 	phone: string
 	note: string
+	invitationStatus: Guest["invitationStatus"]
 	status: Guest["status"]
 	invitedBy: string
 	category: string
@@ -158,6 +166,7 @@ function rowsToGuests(rows: string[][]): ImportedGuest[] {
 			pax: iPax >= 0 ? Math.max(1, Math.round(Number((r[iPax] ?? "").replace(/[^0-9.]/g, "")) || 1)) : 1,
 			phone: iPhone >= 0 ? (r[iPhone] ?? "").trim() : "",
 			note: iNote >= 0 ? (r[iNote] ?? "").trim() : "",
+			invitationStatus: "invited" as const,
 			status: iStatus >= 0 ? matchStatus(r[iStatus] ?? "") : "dijemput",
 			invitedBy: iInvitedBy >= 0 ? (r[iInvitedBy] ?? "").trim() : "",
 			category: iCategory >= 0 ? (r[iCategory] ?? "").trim() : "",
@@ -259,6 +268,7 @@ export default function GuestlistPage() {
 	const [side, setSide] = useState<Guest["side"]>("groom")
 	const [pax, setPax] = useState(1)
 	const [phone, setPhone] = useState("")
+	const [invitationStatus, setInvitationStatus] = useState<Guest["invitationStatus"]>("invited")
 	const [invitedBy, setInvitedBy] = useState("")
 	const [category, setCategory] = useState("")
 	// List changes are authorized against the active guest event.
@@ -356,13 +366,14 @@ export default function GuestlistPage() {
 			const res = await fetch("/api/guests", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name, event, side, pax, phone, invitedBy, category }),
+				body: JSON.stringify({ name, event, side, pax, phone, invitationStatus, invitedBy, category }),
 			})
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Error saving guest.")
 			setGuests((g) => [...g, data.guest])
 			setName("")
 			setPhone("")
+			setInvitationStatus("invited")
 			setPax(1)
 			setError(null)
 		} catch (e2) {
@@ -611,6 +622,7 @@ export default function GuestlistPage() {
 			side: g.side,
 			pax: g.pax,
 			phone: g.phone,
+			invitationStatus: g.invitationStatus ?? "invited",
 			invitedBy: g.invitedBy,
 			category: g.category,
 			status: g.status,
@@ -935,6 +947,17 @@ export default function GuestlistPage() {
 				/>
 			</label>
 			<label className="block">
+				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Invitation</span>
+				<select
+					className="w-full rounded-lg border border-line bg-white px-2 py-1.5 text-[12px] text-ink outline-none focus:border-sage"
+					value={draft.invitationStatus ?? "invited"}
+					onChange={(e) => setDraft({ ...draft, invitationStatus: e.target.value as Guest["invitationStatus"] })}
+				>
+					<option value="invited">Invited</option>
+					<option value="not_invited">Not invited</option>
+				</select>
+			</label>
+			<label className="block">
 				<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Status</span>
 				<select
 					className={`w-full rounded-lg border px-2 py-1.5 text-[12px] ${STATUS_META[draft.status ?? "dijemput"].cls}`}
@@ -988,7 +1011,7 @@ export default function GuestlistPage() {
 			</header>
 
 			{error && (
-				<div className="mb-6 rounded-xl border border-[#E4C5C2] bg-[#FBEFEE] px-4 py-3 text-[13px] text-[#A0524B]">
+				<div className="mb-6 min-w-0 break-words rounded-xl border border-[#E4C5C2] bg-[#FBEFEE] px-4 py-3 text-[13px] text-[#A0524B]">
 					{error}
 				</div>
 			)}
@@ -996,10 +1019,10 @@ export default function GuestlistPage() {
 			{/* Add guest */}
 			{canEdit && <form
 				onSubmit={addGuest}
-				className="mb-8 grid grid-cols-2 gap-3 rounded-2xl border border-line bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,.04)] md:grid-cols-3 xl:grid-cols-[minmax(180px,1.8fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(120px,1.2fr)_minmax(96px,1fr)_minmax(64px,0.6fr)_minmax(110px,1fr)_auto]"
+				className="mb-8 grid min-w-0 grid-cols-1 gap-3 rounded-2xl border border-line bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,.04)] [&>*]:min-w-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5"
 			>
 				<input
-					className={`${inputCls} col-span-2 md:col-span-3 xl:col-span-1`}
+					className={`${inputCls} min-w-0 sm:col-span-2 md:col-span-3 xl:col-span-1`}
 					placeholder="Guest / family name…"
 					value={name}
 					onChange={(e) => setName(e.target.value)}
@@ -1069,25 +1092,33 @@ export default function GuestlistPage() {
 					value={phone}
 					onChange={(e) => setPhone(e.target.value)}
 				/>
+				<select
+					className={inputCls}
+					value={invitationStatus}
+					onChange={(e) => setInvitationStatus(e.target.value as Guest["invitationStatus"])}
+				>
+					<option value="invited">Invited</option>
+					<option value="not_invited">Not invited</option>
+				</select>
 				<button
 					type="submit"
 					disabled={saving}
-					className="col-span-2 rounded-lg bg-sage px-5 py-2 text-[12px] uppercase tracking-[0.14em] text-white transition-opacity disabled:opacity-50 md:col-span-1 md:col-start-2 xl:col-span-1 xl:col-start-auto"
+					className="w-full rounded-lg bg-sage px-5 py-2 text-[12px] uppercase tracking-[0.14em] text-white transition-opacity disabled:opacity-50 sm:col-span-2 md:col-span-1 md:col-start-2 lg:col-span-1 lg:col-start-auto"
 				>
 					{saving ? "Saving…" : "+ Add"}
 				</button>
 			</form>}
 
 			{/* Filters + stats */}
-			<div className="mb-4 space-y-3">
+			<div className="mb-4 min-w-0 space-y-3">
 				{/* Event buttons */}
-				<div className="flex flex-wrap gap-2">
+				<div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
 					{(Object.entries(EVENT_LABEL) as [Guest["event"], string][]).map(([ev, label]) => (
 						<button
 							key={ev}
 							type="button"
 							onClick={() => setFilterEvent(ev)}
-							className={`rounded-lg border px-5 py-2 text-[12px] uppercase tracking-[0.14em] transition-all ${
+							className={`min-w-0 rounded-lg border px-3 py-2 text-[12px] uppercase tracking-[0.14em] transition-all sm:px-5 ${
 								filterEvent === ev
 									? "border-sage bg-sage text-white shadow-sm"
 									: "border-line bg-white text-muted hover:border-sage/40 hover:text-ink"
@@ -1099,11 +1130,11 @@ export default function GuestlistPage() {
 				</div>
 
 				{/* Other filters + stats */}
-				<div className="flex flex-wrap items-center justify-between gap-3">
-					<div className="flex flex-wrap gap-2">
+				<div className="flex min-w-0 flex-col gap-3">
+					<div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
 						{/* Search — matches name, phone, note, invitation, category */}
 						<input
-							className={`${inputCls} min-w-[180px] flex-1 md:flex-none md:w-56`}
+							className={`${inputCls} min-w-0 w-full`}
 							type="search"
 							placeholder="🔍 Search guests…"
 							value={search}
@@ -1148,7 +1179,12 @@ export default function GuestlistPage() {
 							))}
 						</select>
 					</div>
-					<div className="flex flex-wrap items-center gap-2 text-[12px]">
+					<ExportButtons
+						className="w-full"
+						rows={sorted.map(({ _id, createdAt, ...guest }) => guest)}
+						filename={`guestlist-${filterEvent}`}
+					/>
+					<div className="flex min-w-0 flex-wrap items-center gap-2 text-[12px]">
 						<span className="rounded-full border border-line bg-white px-3 py-1.5 text-muted">
 							{totalCount} guest group{totalCount === 1 ? "" : "s"}
 							{search && <span className="text-muted/70"> found</span>}
@@ -1293,7 +1329,22 @@ export default function GuestlistPage() {
 											</label>
 											<label className="col-span-2 block">
 												<span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Status</span>
-												<span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>
+												<div className="flex flex-wrap gap-1.5">
+													{(g.invitationStatus ?? "invited") === "not_invited" ? (
+														<button
+															type="button"
+															disabled={!canEditGuest(g)}
+															onClick={() => patchGuest(g._id, { invitationStatus: "invited" })}
+															className={`rounded-full border px-2.5 py-1 text-[11px] transition-opacity disabled:cursor-default ${INVITATION_STATUS_META.not_invited.cls}`}
+															aria-label={`Mark ${g.name} as invited`}
+															title={canEditGuest(g) ? "Mark as invited" : undefined}
+														>
+															Not invited
+														</button>
+													) : (
+														<span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>
+													)}
+												</div>
 											</label>
 										</div>
 										{editing && (
@@ -1359,8 +1410,23 @@ export default function GuestlistPage() {
 												<td className="px-4 py-3 text-[13px] text-muted">{g.category || "—"}</td>
 												<td className="px-4 py-3 text-[13px] text-muted">{g.pax}</td>
 												<td className="px-4 py-3 text-[13px] text-muted">{g.phone || "—"}</td>
-												<td className="px-4 py-3">
-													<span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>
+														<td className="px-4 py-3">
+															<div className="flex min-w-[120px] flex-col items-start gap-1">
+																{(g.invitationStatus ?? "invited") === "not_invited" ? (
+																	<button
+																		type="button"
+																		disabled={!editable}
+																		onClick={() => patchGuest(g._id, { invitationStatus: "invited" })}
+																		className={`rounded-full border px-2.5 py-1 text-[11px] transition-opacity disabled:cursor-default ${INVITATION_STATUS_META.not_invited.cls}`}
+																		aria-label={`Mark ${g.name} as invited`}
+																		title={editable ? "Mark as invited" : undefined}
+																	>
+																		Not invited
+																	</button>
+																) : (
+																	<span className={`rounded-full border px-2.5 py-1 text-[11px] ${STATUS_META[g.status].cls}`}>{STATUS_META[g.status].label}</span>
+																)}
+															</div>
 												</td>
 												<td className="px-4 py-3 text-right">
 													{editable && !editing && (
@@ -1456,13 +1522,13 @@ export default function GuestlistPage() {
 			    invitation (e.g. Eiman → BSN), so they are managed per
 			    invitation. Scoped editors don't manage these — they affect
 			    every event. */}
-			{canManageLists && <section className="mt-10 grid gap-6 rounded-2xl border border-line bg-white p-5 md:grid-cols-2">
+			{canManageLists && <section className="mt-10 grid min-w-0 gap-6 overflow-hidden rounded-2xl border border-line bg-white p-4 sm:p-5 md:grid-cols-2">
 				{/* Invited-by manager */}
-				<div>
+				<div className="min-w-0">
 					<h2 className="font-serif text-lg text-ink">
 						💌 Invited by — manage invitations
 					</h2>
-					<p className="mt-1 text-[12px] leading-relaxed text-muted">
+					<p className="mt-1 break-words text-[12px] leading-relaxed text-muted">
 						The invitations a guest can belong to — not just Eiman's or
 						Nadia's side, but anyone's like "Abah's invitation".
 						Renaming updates every guest and its categories; deleting
@@ -1470,7 +1536,7 @@ export default function GuestlistPage() {
 					</p>
 
 					<form
-						className="mt-4 flex gap-2"
+						className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row"
 						onSubmit={(e) => {
 							e.preventDefault()
 							addInviter(newInviter, newInviterSide)
@@ -1484,7 +1550,7 @@ export default function GuestlistPage() {
 							onChange={(e) => setNewInviter(e.target.value)}
 						/>
 						<select
-							className={inputCls}
+							className={`${inputCls} w-full sm:w-auto sm:max-w-[10rem]`}
 							value={newInviterSide}
 							onChange={(e) => setNewInviterSide(e.target.value as "bride" | "groom")}
 							title="Which side this invitation belongs to"
@@ -1495,7 +1561,7 @@ export default function GuestlistPage() {
 						<button
 							type="submit"
 							disabled={!newInviter.trim()}
-							className="shrink-0 rounded-lg bg-sage px-4 py-2 text-[12px] uppercase tracking-[0.14em] text-white transition-opacity disabled:opacity-50"
+							className="w-full shrink-0 rounded-lg bg-sage px-4 py-2 text-[12px] uppercase tracking-[0.14em] text-white transition-opacity disabled:opacity-50 sm:w-auto"
 						>
 							+ Add
 						</button>
@@ -1512,9 +1578,9 @@ export default function GuestlistPage() {
 								const catCount = categories.filter((c) => c.owner === inv.name).length
 								const isEditing = editingInviterId === inv._id
 								return (
-									<li
+										<li
 										key={inv._id}
-										className="flex max-w-full items-center gap-2 rounded-full border border-line bg-cream px-3 py-1.5 text-[12px] text-ink"
+											className="flex min-w-0 max-w-full items-center gap-2 rounded-full border border-line bg-cream px-3 py-1.5 text-[12px] text-ink"
 									>
 										{isEditing ? (
 											<>
@@ -1605,11 +1671,11 @@ export default function GuestlistPage() {
 				</div>
 
 				{/* Category manager — grouped per invitation */}
-				<div>
+				<div className="min-w-0">
 					<h2 className="font-serif text-lg text-ink">
 						🏷️ Categories — owned by invitations
 					</h2>
-					<p className="mt-1 text-[12px] leading-relaxed text-muted">
+					<p className="mt-1 break-words text-[12px] leading-relaxed text-muted">
 						Categories belong to an invitation. Add them under the
 						right invitation (e.g. <b>Eiman → BSN</b>) — the guest form
 						then only offers that invitation's categories.
@@ -1625,8 +1691,8 @@ export default function GuestlistPage() {
 								const owned = categories.filter((c) => c.owner === inv.name)
 								return (
 									<details key={inv._id} className="group rounded-xl border border-line bg-cream/40">
-										<summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 [&::-webkit-details-marker]:hidden">
-											<span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+										<summary className="flex min-w-0 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+											<span className="flex min-w-0 items-center gap-2 truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
 												<span className="text-[10px] transition-transform group-open:rotate-90">▸</span>
 												{inv.name}
 											</span>
@@ -1635,8 +1701,8 @@ export default function GuestlistPage() {
 											</span>
 										</summary>
 										<div className="border-t border-line/60 p-3">
-										<form
-											className="flex gap-2"
+												<form
+													className="flex min-w-0 flex-col gap-2 sm:flex-row"
 											onSubmit={(e) => {
 												e.preventDefault()
 												const input = e.currentTarget.elements.namedItem("cat") as HTMLInputElement
@@ -1649,9 +1715,9 @@ export default function GuestlistPage() {
 												className="min-w-0 flex-1 rounded-lg border border-line bg-white px-3 py-1.5 text-[12px] text-ink outline-none focus:border-sage"
 												placeholder="New category, e.g. BSN…"
 											/>
-											<button
+													<button
 												type="submit"
-												className="shrink-0 rounded-lg bg-sage px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-white transition-opacity hover:opacity-90"
+														className="w-full shrink-0 rounded-lg bg-sage px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-white transition-opacity hover:opacity-90 sm:w-auto"
 											>
 												+ Add
 											</button>
@@ -1666,9 +1732,9 @@ export default function GuestlistPage() {
 													).length
 													const isEditing = editingCategoryId === cat._id
 													return (
-														<li
+															<li
 															key={cat._id}
-															className="flex max-w-full items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-[12px] text-ink"
+																className="flex min-w-0 max-w-full items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-[12px] text-ink"
 														>
 															{isEditing ? (
 																<>

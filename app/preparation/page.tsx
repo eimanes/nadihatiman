@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Reveal from "@/components/Reveal"
+import ExportButtons from "@/components/ExportButtons"
 import { usePermissions } from "@/hooks/usePermissions"
 
 type Organizer = {
@@ -317,6 +318,10 @@ export default function PreparationPage() {
             </button>
           ))}
         </div>
+        <ExportButtons
+          rows={filtered.map(({ _id, createdAt, ...section }) => section)}
+          filename={`preparation-${filter}`}
+        />
       </div>
 
       {editMode && (

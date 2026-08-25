@@ -13,6 +13,7 @@ const NOT_CONFIGURED = {
 const EVENTS = ["nikah", "sanding", "tandang"]
 const SIDES = ["bride", "groom"]
 const STATUSES = ["dijemput", "disahkan", "tidak_hadir"]
+const INVITATION_STATUSES = ["not_invited", "invited"]
 
 export async function PATCH(
 	req: Request,
@@ -60,6 +61,9 @@ export async function PATCH(
 		}
 		if (typeof body.phone === "string") updates.phone = body.phone.trim()
 		if (typeof body.note === "string") updates.note = body.note.trim()
+		if (INVITATION_STATUSES.includes(body.invitationStatus)) {
+			updates.invitationStatus = body.invitationStatus
+		}
 		if (STATUSES.includes(body.status)) updates.status = body.status
 		if (Object.keys(updates).length === 0) {
 			return NextResponse.json(
